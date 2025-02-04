@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, List
+
 from llama_models.schema_utils import json_schema_type
 
 

@@ -1,8 +1,8 @@
 import logging
 from typing import Any, Dict, List
-import httpx
 
-from llama_stack.apis.inference import Message, UserMessage, SystemMessage
+import httpx
+from llama_stack.apis.inference import Message, SystemMessage, UserMessage
 from llama_stack.apis.safety import (
     RunShieldResponse,
     Safety,
@@ -11,6 +11,7 @@ from llama_stack.apis.safety import (
 )
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
+
 from .config import FMSModelConfig
 
 logger = logging.getLogger(__name__)
