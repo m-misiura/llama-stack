@@ -23,13 +23,51 @@ class FMSChatAdapter(Safety, ShieldsProtocolPrivate):
         self.score_threshold = 0.5
 
     async def initialize(self) -> None:
+        logger.info("Initializing FMS Chat Adapter")
         pass
 
     async def shutdown(self) -> None:
+        logger.info("Shutting down FMS Chat Adapter")
         pass
 
     async def register_shield(self, shield: Shield) -> None:
-        pass
+        self.registered_shields.append(shield)
+
+    async def _call_orchestrator_api(self, messages: List[Dict[str, str]]) -> Dict:
+        request = {
+            "detectors": {
+                self.config.detector_id: {
+                    **(
+                        {"risk_name": self.config.risk_name}
+                        if self.config.risk_name
+                        else {}
+                    ),
+                    **(
+                        {"risk_definition": self.config.risk_definition}
+                        if self.config.risk_definition
+                        else {}
+                    ),
+                }
+            },
+            "messages": messages,
+        }
+
+        logger.debug(f"Calling orchestrator API with request: {request}")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.config.base_url}/api/v2/text/detection/chat",
+                json=request,
+                headers={
+                    "accept": "application/json",
+                    "Content-Type": "application/json",
+                },
+            )
+
+            if response.status_code != 200:
+                raise RuntimeError(f"Error from Orchestrator API: {response.text}")
+
+            return response.json()
 
     async def run_shield(
         self, shield_id: str, messages: List[Message], params: Dict[str, Any] = None
@@ -40,42 +78,11 @@ class FMSChatAdapter(Safety, ShieldsProtocolPrivate):
 
         chat_messages = [{"role": msg.role, "content": msg.content} for msg in messages]
 
-        request = {
-            "messages": chat_messages,
-            "detector_params": {
-                "temperature": self.config.temperature,
-                **(
-                    {"risk_name": self.config.risk_name}
-                    if self.config.risk_name
-                    else {}
-                ),
-                **(
-                    {"risk_definition": self.config.risk_definition}
-                    if self.config.risk_definition
-                    else {}
-                ),
-                **(self.config.detector_params or {}),
-            },
-        }
+        if self.config.use_orchestrator_api:
+            result = await self._call_orchestrator_api(chat_messages)
 
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{self.config.base_url}/api/v1/text/chat",
-                json=request,
-                headers={
-                    "detector-id": self.config.detector_id,
-                    "accept": "application/json",
-                    "Content-Type": "application/json",
-                },
-            )
-
-            if response.status_code != 200:
-                raise RuntimeError(f"Error from Chat API: {response.text}")
-
-            detections = response.json()
-
-            if isinstance(detections, list) and len(detections) > 0:
-                detection = detections[0]
+            if "detections" in result and result["detections"]:
+                detection = result["detections"][0]
                 if (
                     detection.get("detection") == "Yes"
                     and detection.get("score", 0) > self.score_threshold
@@ -87,10 +94,64 @@ class FMSChatAdapter(Safety, ShieldsProtocolPrivate):
                             metadata={
                                 "detection_type": detection.get("detection_type"),
                                 "score": detection.get("score"),
+                                "detector_id": detection.get("detector_id"),
                                 "risk_name": self.config.risk_name,
                                 "risk_definition": self.config.risk_definition,
                             },
                         )
                     )
+        else:
+            request = {
+                "messages": chat_messages,
+                "detector_params": {
+                    "temperature": self.config.temperature,
+                    **(
+                        {"risk_name": self.config.risk_name}
+                        if self.config.risk_name
+                        else {}
+                    ),
+                    **(
+                        {"risk_definition": self.config.risk_definition}
+                        if self.config.risk_definition
+                        else {}
+                    ),
+                    **(self.config.detector_params or {}),
+                },
+            }
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.config.base_url}/api/v1/text/chat",
+                    json=request,
+                    headers={
+                        "detector-id": self.config.detector_id,
+                        "accept": "application/json",
+                        "Content-Type": "application/json",
+                    },
+                )
+
+                if response.status_code != 200:
+                    raise RuntimeError(f"Error from Chat API: {response.text}")
+
+                detections = response.json()
+
+                if isinstance(detections, list) and detections:
+                    detection = detections[0]
+                    if (
+                        detection.get("detection") == "Yes"
+                        and detection.get("score", 0) > self.score_threshold
+                    ):
+                        return RunShieldResponse(
+                            violation=SafetyViolation(
+                                user_message=f"Content violation detected ({detection.get('detection_type')}) with confidence {detection.get('score'):.2f}",
+                                violation_level=ViolationLevel.ERROR,
+                                metadata={
+                                    "detection_type": detection.get("detection_type"),
+                                    "score": detection.get("score"),
+                                    "risk_name": self.config.risk_name,
+                                    "risk_definition": self.config.risk_definition,
+                                },
+                            )
+                        )
 
         return RunShieldResponse()

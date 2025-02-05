@@ -28,3 +28,5 @@ class FMSChatAdapterConfig:
     risk_name: Optional[str] = None
     risk_definition: Optional[str] = None
     detector_params: Optional[Dict[str, Any]] = None
+    use_orchestrator_api: bool = False
+    guardrails_detectors: Optional[Dict[str, Dict]] = None
