@@ -13,6 +13,8 @@ class FMSModelConfig:
     confidence_threshold: float = 0.5
     allow_list: Optional[List[str]] = None
     block_list: Optional[List[str]] = None
+    use_orchestrator_api: bool = False
+    guardrails_detectors: Optional[Dict[str, Dict]] = None
 
 
 @json_schema_type
