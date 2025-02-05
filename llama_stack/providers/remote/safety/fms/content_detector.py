@@ -21,6 +21,7 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
     def __init__(self, config: FMSModelConfig) -> None:
         self.config = config
         self.registered_shields = []
+        self.score_threshold = 0.5
 
     async def initialize(self) -> None:
         logger.info("Initializing FMS Model Adapter")
@@ -34,7 +35,11 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
         self.registered_shields.append(shield)
 
     async def _call_orchestrator_api(self, content: str) -> Dict:
-        request = {"detectors": {self.config.detector_id: {}}, "content": content}
+        detectors = self.config.guardrails_detectors or {self.config.detector_id: {}}
+
+        request = {"detectors": detectors, "content": content}
+
+        logger.debug(f"Calling orchestrator API with request: {request}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -49,7 +54,9 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
             if response.status_code != 200:
                 raise RuntimeError(f"Error from Guardrails API: {response.text}")
 
-            return response.json()
+            result = response.json()
+            logger.debug(f"Orchestrator API response: {result}")
+            return result
 
     async def _call_detectors_api(self, contents: List[str]) -> Dict:
         request = {"contents": contents}
@@ -65,6 +72,30 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
                 raise RuntimeError(f"Error from Content API: {response.text}")
 
             return response.json()
+
+    def _get_detector_violation(
+        self, detections: List[Dict], expected_detector: str = None
+    ) -> Dict:
+        # Filter by threshold
+        valid_detections = [
+            d
+            for d in detections
+            if d.get("score", 0) > self.config.confidence_threshold
+        ]
+
+        if not valid_detections:
+            return None
+
+        # If expected detector specified, check its detections first
+        if expected_detector:
+            detector_matches = [
+                d for d in valid_detections if d.get("detector_id") == expected_detector
+            ]
+            if detector_matches:
+                return max(detector_matches, key=lambda x: x.get("score", 0))
+
+        # No match for expected detector, return highest scoring detection
+        return max(valid_detections, key=lambda x: x.get("score", 0))
 
     async def run_shield(
         self, shield_id: str, messages: List[Message], params: Dict[str, Any] = None
@@ -83,30 +114,37 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
                 return RunShieldResponse()
 
             if self.config.use_orchestrator_api:
-                # Use FMS Orchestrator API: https://foundation-model-stack.github.io/fms-guardrails-orchestrator/?urls.primaryName=Orchestrator+API#/Task%20-%20Detection/api_v2_detection_text_content_unary_handler
                 for content in contents:
                     result = await self._call_orchestrator_api(content)
+                    expected_detector = (
+                        params.get("expected_detector")
+                        if params
+                        else shield.provider_resource_id
+                    )
 
-                    for detection in result.get("detections", []):
-                        if detection.get("score", 0) > self.config.confidence_threshold:
-                            return RunShieldResponse(
-                                violation=SafetyViolation(
-                                    user_message=f"Content flagged as {detection['detection_type']} with confidence {detection['score']:.2f}",
-                                    violation_level=ViolationLevel.ERROR,
-                                    metadata={
-                                        "detection_type": detection["detection_type"],
-                                        "score": detection["score"],
-                                        "detector_id": detection["detector_id"],
-                                        "text": detection["text"],
-                                        "start": detection["start"],
-                                        "end": detection["end"],
-                                    },
-                                )
+                    violation_detection = self._get_detector_violation(
+                        result.get("detections", []), expected_detector
+                    )
+
+                    if violation_detection:
+                        return RunShieldResponse(
+                            violation=SafetyViolation(
+                                user_message=f"Content flagged by {violation_detection['detector_id']} as {violation_detection['detection_type']} with confidence {violation_detection['score']:.2f}",
+                                violation_level=ViolationLevel.ERROR,
+                                metadata={
+                                    "detection_type": violation_detection[
+                                        "detection_type"
+                                    ],
+                                    "score": violation_detection["score"],
+                                    "detector_id": violation_detection["detector_id"],
+                                    "text": violation_detection["text"],
+                                    "start": violation_detection["start"],
+                                    "end": violation_detection["end"],
+                                },
                             )
+                        )
             else:
-                # Use Detectors API: https://foundation-model-stack.github.io/fms-guardrails-orchestrator/?urls.primaryName=Detector+API#/Text/text_content_analysis_unary_handler
                 result = await self._call_detectors_api(contents)
-
                 for analysis_list in result:
                     for analysis in analysis_list:
                         if analysis["score"] > self.config.confidence_threshold:
