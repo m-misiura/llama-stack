@@ -5,14 +5,28 @@
 # the root directory of this source tree.
 
 
-from typing import Any
+from typing import Any, Union
+from .config import FMSModelConfig, FMSChatAdapterConfig
 
-from .config import FMSModelConfig
 
+async def get_adapter_impl(
+    config: Union[FMSModelConfig, FMSChatAdapterConfig], _deps
+) -> Any:
+    if isinstance(config, FMSChatAdapterConfig):
+        from .chat_detector import FMSChatAdapter
 
-async def get_adapter_impl(config: FMSModelConfig, _deps) -> Any:
-    from .content_detector import FMSModelAdapter
+        impl = FMSChatAdapter(config)
+    elif config.detector_id == "mmluTopicMatch":
+        from .topic_detector import FMSTopicMatchAdapter
 
-    impl = FMSModelAdapter(config)
+        impl = FMSTopicMatchAdapter(config)
+    else:
+        from .content_detector import FMSModelAdapter
+
+        impl = FMSModelAdapter(config)
+
     await impl.initialize()
     return impl
+
+
+__all__ = ["get_adapter_impl", "FMSModelConfig", "FMSChatConfig"]
