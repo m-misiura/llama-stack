@@ -2,15 +2,22 @@ import asyncio
 from llama_stack.apis.inference import UserMessage
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.remote.safety.fms import get_adapter_impl
-from llama_stack.providers.remote.safety.fms.config import FMSModelConfig
+from llama_stack.providers.remote.safety.fms.config import (
+    DetectorConfig,
+    FMSModelConfig,
+)
 
 
 async def test_fms_live():
     # Setup config
     config = FMSModelConfig(
-        base_url="http://hap-route-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
-        detector_id="hap",
-        confidence_threshold=0.8,
+        detectors=[
+            DetectorConfig(
+                base_url="http://hap-route-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
+                detector_id="hap",
+                confidence_threshold=0.8,
+            )
+        ]
     )
 
     # Initialize adapter
@@ -22,8 +29,6 @@ async def test_fms_live():
             return Shield(
                 identifier="test-shield",
                 provider_id="fms",
-                provider_resource_id="hap",
-                params={},
             )
 
     adapter.shield_store = MockShieldStore()
