@@ -1,11 +1,11 @@
 from typing import Any, Union
-from .config import FMSModelConfig, FMSChatAdapterConfig
+from .config import FMSModelConfig, ChatDetectionConfig
 
 
 async def get_adapter_impl(
-    config: Union[FMSModelConfig, FMSChatAdapterConfig], _deps
+    config: Union[FMSModelConfig, ChatDetectionConfig], _deps
 ) -> Any:
-    if isinstance(config, FMSChatAdapterConfig):
+    if isinstance(config, ChatDetectionConfig):
         from .chat_detector import FMSChatAdapter
 
         impl = FMSChatAdapter(config)
@@ -19,4 +19,4 @@ async def get_adapter_impl(
     return impl
 
 
-__all__ = ["get_adapter_impl", "FMSModelConfig", "FMSChatConfig"]
+__all__ = ["get_adapter_impl", "FMSModelConfig", "ChatDetectionConfig"]

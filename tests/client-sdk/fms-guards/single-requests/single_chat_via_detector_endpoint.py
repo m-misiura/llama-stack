@@ -3,12 +3,12 @@ import os
 from llama_stack.apis.inference import UserMessage
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.remote.safety.fms import get_adapter_impl
-from llama_stack.providers.remote.safety.fms.config import FMSChatAdapterConfig
+from llama_stack.providers.remote.safety.fms.config import ChatDetectionConfig
 
 
 async def test_fms_chat_orchestrator_live():
     # Setup config for orchestrator
-    config = FMSChatAdapterConfig(
+    config = ChatDetectionConfig(
         base_url="https://guardrails-nlp-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
         detector_id="granite",
         temperature=0.0,

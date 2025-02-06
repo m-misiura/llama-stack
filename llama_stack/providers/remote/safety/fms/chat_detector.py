@@ -11,13 +11,13 @@ from llama_stack.apis.safety import (
 )
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
-from .config import FMSChatAdapterConfig
+from .config import ChatDetectionConfig
 
 logger = logging.getLogger(__name__)
 
 
 class FMSChatAdapter(Safety, ShieldsProtocolPrivate):
-    def __init__(self, config: FMSChatAdapterConfig) -> None:
+    def __init__(self, config: ChatDetectionConfig) -> None:
         self.config = config
         self.registered_shields = []
         self.score_threshold = 0.5

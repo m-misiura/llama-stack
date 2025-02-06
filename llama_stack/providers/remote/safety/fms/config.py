@@ -42,7 +42,7 @@ class FMSModelConfig:
 
 @json_schema_type
 @dataclass
-class FMSChatAdapterConfig:
+class ChatDetectionConfig:
     """Configuration for FMS safety model provider"""
 
     base_url: str

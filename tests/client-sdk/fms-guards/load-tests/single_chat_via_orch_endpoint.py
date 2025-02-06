@@ -5,7 +5,7 @@ from datetime import datetime
 from llama_stack.apis.inference import UserMessage
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.remote.safety.fms import get_adapter_impl
-from llama_stack.providers.remote.safety.fms.config import FMSChatAdapterConfig
+from llama_stack.providers.remote.safety.fms.config import ChatDetectionConfig
 
 
 async def run_single_test(adapter, case):
@@ -47,7 +47,7 @@ async def run_single_test(adapter, case):
 
 
 async def load_test(num_requests=100, concurrent_requests=10):
-    config = FMSChatAdapterConfig(
+    config = ChatDetectionConfig(
         base_url="https://guardrails-nlp-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
         detector_id="granite",
         temperature=0.0,
