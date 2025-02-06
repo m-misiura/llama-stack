@@ -1,5 +1,6 @@
 import logging
 from typing import Any, Dict, List
+import asyncio
 
 import httpx
 from llama_stack.apis.inference import Message, SystemMessage, UserMessage
@@ -12,7 +13,7 @@ from llama_stack.apis.safety import (
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
 
-from .config import FMSModelConfig
+from .config import FMSModelConfig, DetectorConfig
 
 logger = logging.getLogger(__name__)
 
@@ -35,15 +36,15 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
         self.registered_shields.append(shield)
 
     async def _call_orchestrator_api(self, content: str) -> Dict:
-        detectors = self.config.guardrails_detectors or {self.config.detector_id: {}}
-
+        detectors = self.config.guardrails_detectors or {
+            self.config.detectors[0].detector_id: {}
+        }
         request = {"detectors": detectors, "content": content}
-
         logger.debug(f"Calling orchestrator API with request: {request}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.config.base_url}/api/v2/text/detection/content",
+                f"{self.config.detectors[0].base_url}/api/v2/text/detection/content",
                 json=request,
                 headers={
                     "accept": "application/json",
@@ -58,25 +59,39 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
             logger.debug(f"Orchestrator API response: {result}")
             return result
 
-    async def _call_detectors_api(self, contents: List[str]) -> Dict:
-        request = {"contents": contents}
+    async def _call_detector_api(self, content: str, detector: DetectorConfig) -> Dict:
+        request = {"contents": [content]}
+        logger.debug(f"Calling detector {detector.detector_id} with request: {request}")
 
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.config.base_url}/api/v1/text/contents",
+                f"{detector.base_url}/api/v1/text/contents",
                 json=request,
-                headers={"detector-id": self.config.detector_id},
+                headers={
+                    "detector-id": detector.detector_id,
+                    "accept": "application/json",
+                    "Content-Type": "application/json",
+                },
             )
 
             if response.status_code != 200:
-                raise RuntimeError(f"Error from Content API: {response.text}")
+                raise RuntimeError(f"Error from Detector API: {response.text}")
 
-            return response.json()
+            result = response.json()
+            logger.debug(f"Detector {detector.detector_id} response: {result}")
+            return result
+
+    async def _call_all_detectors(self, content: str) -> List[Dict]:
+        tasks = []
+        for detector in self.config.detectors:
+            tasks.append(self._call_detector_api(content, detector))
+
+        results = await asyncio.gather(*tasks)
+        return results
 
     def _get_detector_violation(
         self, detections: List[Dict], expected_detector: str = None
     ) -> Dict:
-        # Filter by threshold
         valid_detections = [
             d
             for d in detections
@@ -86,7 +101,6 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
         if not valid_detections:
             return None
 
-        # If expected detector specified, check its detections first
         if expected_detector:
             detector_matches = [
                 d for d in valid_detections if d.get("detector_id") == expected_detector
@@ -94,8 +108,22 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
             if detector_matches:
                 return max(detector_matches, key=lambda x: x.get("score", 0))
 
-        # No match for expected detector, return highest scoring detection
         return max(valid_detections, key=lambda x: x.get("score", 0))
+
+    def _process_detector_response(self, result: Dict, detector_id: str) -> Dict:
+        for analysis_list in result:
+            for analysis in analysis_list:
+                if analysis["score"] > self.config.confidence_threshold:
+                    return {
+                        "detection": "Yes",
+                        "detection_type": analysis["detection_type"],
+                        "score": analysis["score"],
+                        "detector_id": detector_id,
+                        "text": analysis.get("text", ""),
+                        "start": analysis.get("start", 0),
+                        "end": analysis.get("end", 0),
+                    }
+        return None
 
     async def run_shield(
         self, shield_id: str, messages: List[Message], params: Dict[str, Any] = None
@@ -144,17 +172,44 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
                             )
                         )
             else:
-                result = await self._call_detectors_api(contents)
-                for analysis_list in result:
-                    for analysis in analysis_list:
-                        if analysis["score"] > self.config.confidence_threshold:
+                for content in contents:
+                    results = await self._call_all_detectors(content)
+                    detections = []
+
+                    for idx, result in enumerate(results):
+                        detector = self.config.detectors[idx]
+                        detection = self._process_detector_response(
+                            result, detector.detector_id
+                        )
+                        if detection:
+                            detections.append(detection)
+
+                    if detections:
+                        expected_detector = (
+                            params.get("expected_detector")
+                            if params
+                            else shield.provider_resource_id
+                        )
+                        violation_detection = self._get_detector_violation(
+                            detections, expected_detector
+                        )
+
+                        if violation_detection:
                             return RunShieldResponse(
                                 violation=SafetyViolation(
-                                    user_message=f"Content flagged as {analysis['sequence_classification']} with confidence {analysis['score']:.2f}",
+                                    user_message=f"Content flagged by {violation_detection['detector_id']} as {violation_detection['detection_type']} with confidence {violation_detection['score']:.2f}",
                                     violation_level=ViolationLevel.ERROR,
                                     metadata={
-                                        "detection_type": analysis["detection_type"],
-                                        "score": analysis["score"],
+                                        "detection_type": violation_detection[
+                                            "detection_type"
+                                        ],
+                                        "score": violation_detection["score"],
+                                        "detector_id": violation_detection[
+                                            "detector_id"
+                                        ],
+                                        "text": violation_detection.get("text", ""),
+                                        "start": violation_detection.get("start", 0),
+                                        "end": violation_detection.get("end", 0),
                                     },
                                 )
                             )

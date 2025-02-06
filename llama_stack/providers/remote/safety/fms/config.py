@@ -5,24 +5,39 @@ from llama_models.schema_utils import json_schema_type
 
 @json_schema_type
 @dataclass
-class FMSModelConfig:
+class DetectorConfig:
     """Configuration for FMS safety model provider"""
 
     base_url: str
-    detector_id: Optional[str] = None
+    detector_id: str
     confidence_threshold: float = 0.5
+
+
+@json_schema_type
+@dataclass
+class FMSModelConfig:
+    """Configuration for FMS safety model provider"""
+
+    detectors: List[DetectorConfig]
+    confidence_threshold: float = 0.5  # Global threshold
     allow_list: Optional[List[str]] = None
     block_list: Optional[List[str]] = None
     use_orchestrator_api: bool = False
     guardrails_detectors: Optional[Dict[str, Dict]] = None
 
-    # def __post_init__(self):
-    #     if self.use_orchestrator_api and not self.guardrails_detectors:
-    #         raise ValueError(
-    #             "guardrails_detectors required when use_orchestrator_api is True"
-    #         )
-    #     if not self.use_orchestrator_api and not self.detector_id:
-    #         raise ValueError("detector_id required when use_orchestrator_api is False")
+    def __post_init__(self):
+        if self.use_orchestrator_api and not self.guardrails_detectors:
+            # For orchestrator, construct detectors dict from detector list
+            self.guardrails_detectors = {
+                detector.detector_id: {} for detector in self.detectors
+            }
+
+    def get_detector(self, detector_id: str) -> Optional[DetectorConfig]:
+        """Get detector config by ID"""
+        for detector in self.detectors:
+            if detector.detector_id == detector_id:
+                return detector
+        return None
 
 
 @json_schema_type

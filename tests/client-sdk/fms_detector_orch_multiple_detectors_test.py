@@ -3,13 +3,21 @@ import os
 from llama_stack.apis.inference import UserMessage
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.remote.safety.fms import get_adapter_impl
-from llama_stack.providers.remote.safety.fms.config import FMSModelConfig
+from llama_stack.providers.remote.safety.fms.config import (
+    DetectorConfig,
+    FMSModelConfig,
+)
 
 
 async def test_fms_guardrails_live():
     config = FMSModelConfig(
-        base_url="https://guardrails-nlp-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
-        confidence_threshold=0.5,
+        detectors=[
+            DetectorConfig(
+                base_url="https://guardrails-nlp-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
+                detector_id="lol",
+                confidence_threshold=0.5,
+            )
+        ],
         use_orchestrator_api=True,
         guardrails_detectors={"hap": {}, "suicide": {}},
     )

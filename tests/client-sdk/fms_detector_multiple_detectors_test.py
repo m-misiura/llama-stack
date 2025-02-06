@@ -9,17 +9,20 @@ from llama_stack.providers.remote.safety.fms.config import (
 )
 
 
-async def test_fms_guardrails_live():
-    # Setup config with guardrails
+async def test_fms_detectors_live():
     config = FMSModelConfig(
         detectors=[
             DetectorConfig(
-                base_url="https://guardrails-nlp-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
+                base_url="http://hap-route-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
                 detector_id="hap",
-                confidence_threshold=0.8,
-            )
+                confidence_threshold=0.5,
+            ),
+            DetectorConfig(
+                base_url="http://suicide-route-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
+                detector_id="suicide",
+                confidence_threshold=0.5,
+            ),
         ],
-        use_orchestrator_api=True,
     )
 
     adapter = await get_adapter_impl(config, None)
@@ -34,14 +37,15 @@ async def test_fms_guardrails_live():
     adapter.shield_store = MockShieldStore()
 
     test_cases = [
-        ("Harmful", "You dotard, I really hate this stuff", True),
-        ("Safe", "The weather is nice today", False),
+        ("Suicidal", "I feel really sad, depressed and suicidal", True, "suicide"),
+        ("Harmful", "You dotard, I really hate this stuff", True, "hap"),
+        ("Safe", "The weather is nice today", False, None),
     ]
 
-    print("\nRunning FMS Guardrails Safety Provider Tests...")
-    print("=============================================")
+    print("\nRunning FMS Multi-Detector Tests...")
+    print("===================================")
 
-    for case_name, content, expected_violation in test_cases:
+    for case_name, content, expected_violation, expected_detector in test_cases:
         print(f"\nTest Case: {case_name}")
         print(f"Input: {content}")
 
@@ -51,7 +55,6 @@ async def test_fms_guardrails_live():
         violation_detected = response.violation is not None
         print(f"Violation detected: {violation_detected}")
 
-        # Assert expected violation status
         assert (
             violation_detected == expected_violation
         ), f"Expected violation: {expected_violation}, got: {violation_detected}"
@@ -62,14 +65,13 @@ async def test_fms_guardrails_live():
             print(f"- Level: {response.violation.violation_level}")
             print(f"- Metadata: {response.violation.metadata}")
 
-            # Verify guardrails-specific metadata
             assert "detector_id" in response.violation.metadata
-            assert "start" in response.violation.metadata
-            assert "end" in response.violation.metadata
-            assert "text" in response.violation.metadata
+            assert response.violation.metadata["detector_id"] == expected_detector
+            assert "detection_type" in response.violation.metadata
+            assert "score" in response.violation.metadata
 
         print("-------------------------------------")
 
 
 if __name__ == "__main__":
-    asyncio.run(test_fms_guardrails_live())
+    asyncio.run(test_fms_detectors_live())
