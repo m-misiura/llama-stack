@@ -16,7 +16,7 @@ from .config import ChatDetectionConfig
 logger = logging.getLogger(__name__)
 
 
-class FMSChatAdapter(Safety, ShieldsProtocolPrivate):
+class ChatDetection(Safety, ShieldsProtocolPrivate):
     def __init__(self, config: ChatDetectionConfig) -> None:
         self.config = config
         self.registered_shields = []

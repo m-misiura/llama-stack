@@ -6,9 +6,9 @@ async def get_adapter_impl(
     config: Union[FMSModelConfig, ChatDetectionConfig], _deps
 ) -> Any:
     if isinstance(config, ChatDetectionConfig):
-        from .chat_detector import FMSChatAdapter
+        from .chat_detector import ChatDetection
 
-        impl = FMSChatAdapter(config)
+        impl = ChatDetection(config)
     else:
         # Handle FMSModelConfig with detectors list
         from .content_detector import FMSModelAdapter
