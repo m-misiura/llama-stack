@@ -4,7 +4,7 @@ from llama_stack.apis.inference import UserMessage
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.remote.safety.fms import get_adapter_impl
 from llama_stack.providers.remote.safety.fms.config import (
-    DetectorConfig,
+    BaseContentDetectionConfig,
     FMSModelConfig,
 )
 
@@ -12,12 +12,12 @@ from llama_stack.providers.remote.safety.fms.config import (
 async def test_fms_detectors_live():
     config = FMSModelConfig(
         detectors=[
-            DetectorConfig(
+            BaseContentDetectionConfig(
                 base_url="http://hap-route-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
                 detector_id="hap",
                 confidence_threshold=0.5,
             ),
-            DetectorConfig(
+            BaseContentDetectionConfig(
                 base_url="http://suicide-route-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
                 detector_id="suicide",
                 confidence_threshold=0.5,

@@ -13,7 +13,7 @@ from llama_stack.apis.safety import (
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
 
-from .config import FMSModelConfig, DetectorConfig
+from .config import FMSModelConfig, BaseContentDetectionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,9 @@ class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
             logger.debug(f"Orchestrator API response: {result}")
             return result
 
-    async def _call_detector_api(self, content: str, detector: DetectorConfig) -> Dict:
+    async def _call_detector_api(
+        self, content: str, detector: BaseContentDetectionConfig
+    ) -> Dict:
         request = {"contents": [content]}
         logger.debug(f"Calling detector {detector.detector_id} with request: {request}")
 

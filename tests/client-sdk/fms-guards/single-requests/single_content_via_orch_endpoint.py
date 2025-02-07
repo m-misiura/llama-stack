@@ -4,7 +4,7 @@ from llama_stack.apis.inference import UserMessage
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.remote.safety.fms import get_adapter_impl
 from llama_stack.providers.remote.safety.fms.config import (
-    DetectorConfig,
+    BaseContentDetectionConfig,
     FMSModelConfig,
 )
 
@@ -13,7 +13,7 @@ async def test_fms_guardrails_live():
     # Setup config with guardrails
     config = FMSModelConfig(
         detectors=[
-            DetectorConfig(
+            BaseContentDetectionConfig(
                 base_url="https://guardrails-nlp-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",
                 detector_id="hap",
                 confidence_threshold=0.8,

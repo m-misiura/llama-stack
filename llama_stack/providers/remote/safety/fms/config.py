@@ -5,7 +5,7 @@ from llama_models.schema_utils import json_schema_type
 
 @json_schema_type
 @dataclass
-class DetectorConfig:
+class BaseContentDetectionConfig:
     """Configuration for FMS safety model provider"""
 
     base_url: str
@@ -18,7 +18,7 @@ class DetectorConfig:
 class FMSModelConfig:
     """Configuration for FMS safety model provider"""
 
-    detectors: List[DetectorConfig]
+    detectors: List[BaseContentDetectionConfig]
     confidence_threshold: float = 0.5  # Global threshold
     allow_list: Optional[List[str]] = None
     block_list: Optional[List[str]] = None
@@ -32,7 +32,7 @@ class FMSModelConfig:
                 detector.detector_id: {} for detector in self.detectors
             }
 
-    def get_detector(self, detector_id: str) -> Optional[DetectorConfig]:
+    def get_detector(self, detector_id: str) -> Optional[BaseContentDetectionConfig]:
         """Get detector config by ID"""
         for detector in self.detectors:
             if detector.detector_id == detector_id:
