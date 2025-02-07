@@ -11,9 +11,9 @@ async def get_adapter_impl(
         impl = ChatDetection(config)
     else:
         # Handle ContentDetectionConfig with detectors list
-        from .content_detector import FMSModelAdapter
+        from .content_detector import ContentDetection
 
-        impl = FMSModelAdapter(config)
+        impl = ContentDetection(config)
 
     await impl.initialize()
     return impl

@@ -18,7 +18,7 @@ from .config import ContentDetectionConfig, BaseContentDetectionConfig
 logger = logging.getLogger(__name__)
 
 
-class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
+class ContentDetection(Safety, ShieldsProtocolPrivate):
     def __init__(self, config: ContentDetectionConfig) -> None:
         self.config = config
         self.registered_shields = []
