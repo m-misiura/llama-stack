@@ -5,12 +5,12 @@ from llama_stack.apis.shields import Shield
 from llama_stack.providers.remote.safety.fms import get_adapter_impl
 from llama_stack.providers.remote.safety.fms.config import (
     BaseContentDetectionConfig,
-    FMSModelConfig,
+    ContentDetectionConfig,
 )
 
 
 async def test_fms_detectors_live():
-    config = FMSModelConfig(
+    config = ContentDetectionConfig(
         detectors=[
             BaseContentDetectionConfig(
                 base_url="http://hap-route-test.apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com",

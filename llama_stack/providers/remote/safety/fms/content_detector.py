@@ -13,13 +13,13 @@ from llama_stack.apis.safety import (
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
 
-from .config import FMSModelConfig, BaseContentDetectionConfig
+from .config import ContentDetectionConfig, BaseContentDetectionConfig
 
 logger = logging.getLogger(__name__)
 
 
 class FMSModelAdapter(Safety, ShieldsProtocolPrivate):
-    def __init__(self, config: FMSModelConfig) -> None:
+    def __init__(self, config: ContentDetectionConfig) -> None:
         self.config = config
         self.registered_shields = []
         self.score_threshold = 0.5

@@ -15,7 +15,7 @@ class BaseContentDetectionConfig:
 
 @json_schema_type
 @dataclass
-class FMSModelConfig:
+class ContentDetectionConfig:
     """Configuration for FMS safety model provider"""
 
     detectors: List[BaseContentDetectionConfig]
