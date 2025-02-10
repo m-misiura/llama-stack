@@ -50,6 +50,7 @@ class ContentDetection(Safety, ShieldsProtocolPrivate):
                     "accept": "application/json",
                     "Content-Type": "application/json",
                 },
+                timeout=None,
             )
 
             if response.status_code != 200:
@@ -74,6 +75,7 @@ class ContentDetection(Safety, ShieldsProtocolPrivate):
                     "accept": "application/json",
                     "Content-Type": "application/json",
                 },
+                timeout=None,
             )
 
             if response.status_code != 200:
