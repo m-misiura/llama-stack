@@ -1,0 +1,556 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: regex-detector-0
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-0
+    deploy-name: regex-detector-0
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fmstack-nlp
+      component: regex-detector-0
+      deploy-name: regex-detector-0
+  template:
+    metadata:
+      labels:
+        app: fmstack-nlp
+        component: regex-detector-0
+        deploy-name: regex-detector-0
+    spec:
+      serviceAccountName: user-one
+      containers:
+      - name: regex-detector-0
+        image: quay.io/rh-ee-mmisiura/local-detectors:pull_request
+        command:
+        - /app/target/release/local-detectors
+        env:
+        - name: HOST
+          value: 0.0.0.0
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+        imagePullPolicy: Always
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: regex-detector-0
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-0
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: fmstack-nlp
+    component: regex-detector-0
+    deploy-name: regex-detector-0
+
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: regex-detector-0-route
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-0
+  annotations:
+    openshift.io/host.generated: 'true'
+spec:
+  to:
+    kind: Service
+    name: regex-detector-0
+    weight: 100
+  port:
+    targetPort: 8080
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: regex-detector-1
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-1
+    deploy-name: regex-detector-1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fmstack-nlp
+      component: regex-detector-1
+      deploy-name: regex-detector-1
+  template:
+    metadata:
+      labels:
+        app: fmstack-nlp
+        component: regex-detector-1
+        deploy-name: regex-detector-1
+    spec:
+      serviceAccountName: user-one
+      containers:
+      - name: regex-detector-1
+        image: quay.io/rh-ee-mmisiura/local-detectors:pull_request
+        command:
+        - /app/target/release/local-detectors
+        env:
+        - name: HOST
+          value: 0.0.0.0
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+        imagePullPolicy: Always
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: regex-detector-1
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-1
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: fmstack-nlp
+    component: regex-detector-1
+    deploy-name: regex-detector-1
+
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: regex-detector-1-route
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-1
+  annotations:
+    openshift.io/host.generated: 'true'
+spec:
+  to:
+    kind: Service
+    name: regex-detector-1
+    weight: 100
+  port:
+    targetPort: 8080
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: regex-detector-2
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-2
+    deploy-name: regex-detector-2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fmstack-nlp
+      component: regex-detector-2
+      deploy-name: regex-detector-2
+  template:
+    metadata:
+      labels:
+        app: fmstack-nlp
+        component: regex-detector-2
+        deploy-name: regex-detector-2
+    spec:
+      serviceAccountName: user-one
+      containers:
+      - name: regex-detector-2
+        image: quay.io/rh-ee-mmisiura/local-detectors:pull_request
+        command:
+        - /app/target/release/local-detectors
+        env:
+        - name: HOST
+          value: 0.0.0.0
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+        imagePullPolicy: Always
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: regex-detector-2
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-2
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: fmstack-nlp
+    component: regex-detector-2
+    deploy-name: regex-detector-2
+
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: regex-detector-2-route
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-2
+  annotations:
+    openshift.io/host.generated: 'true'
+spec:
+  to:
+    kind: Service
+    name: regex-detector-2
+    weight: 100
+  port:
+    targetPort: 8080
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: regex-detector-3
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-3
+    deploy-name: regex-detector-3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fmstack-nlp
+      component: regex-detector-3
+      deploy-name: regex-detector-3
+  template:
+    metadata:
+      labels:
+        app: fmstack-nlp
+        component: regex-detector-3
+        deploy-name: regex-detector-3
+    spec:
+      serviceAccountName: user-one
+      containers:
+      - name: regex-detector-3
+        image: quay.io/rh-ee-mmisiura/local-detectors:pull_request
+        command:
+        - /app/target/release/local-detectors
+        env:
+        - name: HOST
+          value: 0.0.0.0
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+        imagePullPolicy: Always
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: regex-detector-3
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-3
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: fmstack-nlp
+    component: regex-detector-3
+    deploy-name: regex-detector-3
+
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: regex-detector-3-route
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-3
+  annotations:
+    openshift.io/host.generated: 'true'
+spec:
+  to:
+    kind: Service
+    name: regex-detector-3
+    weight: 100
+  port:
+    targetPort: 8080
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: regex-detector-4
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-4
+    deploy-name: regex-detector-4
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fmstack-nlp
+      component: regex-detector-4
+      deploy-name: regex-detector-4
+  template:
+    metadata:
+      labels:
+        app: fmstack-nlp
+        component: regex-detector-4
+        deploy-name: regex-detector-4
+    spec:
+      serviceAccountName: user-one
+      containers:
+      - name: regex-detector-4
+        image: quay.io/rh-ee-mmisiura/local-detectors:pull_request
+        command:
+        - /app/target/release/local-detectors
+        env:
+        - name: HOST
+          value: 0.0.0.0
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+        imagePullPolicy: Always
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: regex-detector-4
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-4
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: fmstack-nlp
+    component: regex-detector-4
+    deploy-name: regex-detector-4
+
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: regex-detector-4-route
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-4
+  annotations:
+    openshift.io/host.generated: 'true'
+spec:
+  to:
+    kind: Service
+    name: regex-detector-4
+    weight: 100
+  port:
+    targetPort: 8080
+
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: regex-detector-5
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-5
+    deploy-name: regex-detector-5
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fmstack-nlp
+      component: regex-detector-5
+      deploy-name: regex-detector-5
+  template:
+    metadata:
+      labels:
+        app: fmstack-nlp
+        component: regex-detector-5
+        deploy-name: regex-detector-5
+    spec:
+      serviceAccountName: user-one
+      containers:
+      - name: regex-detector-5
+        image: quay.io/rh-ee-mmisiura/local-detectors:pull_request
+        command:
+        - /app/target/release/local-detectors
+        env:
+        - name: HOST
+          value: 0.0.0.0
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        resources:
+          limits:
+            cpu: 500m
+            memory: 1Gi
+          requests:
+            cpu: 500m
+            memory: 1Gi
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          seccompProfile:
+            type: RuntimeDefault
+        imagePullPolicy: Always
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: regex-detector-5
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-5
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: fmstack-nlp
+    component: regex-detector-5
+    deploy-name: regex-detector-5
+
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: regex-detector-5-route
+  labels:
+    app: fmstack-nlp
+    component: regex-detector-5
+  annotations:
+    openshift.io/host.generated: 'true'
+spec:
+  to:
+    kind: Service
+    name: regex-detector-5
+    weight: 100
+  port:
+    targetPort: 8080

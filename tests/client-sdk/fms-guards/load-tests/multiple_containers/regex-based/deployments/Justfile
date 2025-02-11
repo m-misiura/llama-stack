@@ -1,0 +1,36 @@
+default:
+    @just --list
+
+# Generate and deploy regex detectors
+deploy detector-num image="quay.io/rh-ee-mmisiura/local-detectors:pull_request" domain="apps.rosa.trustyai-mac.bd9q.p3.openshiftapps.com":
+    @echo "Generating configurations..."
+    python generate_detectors.py --detector-num {{detector-num}} --image {{image}} --domain {{domain}}
+    @echo "Applying deployments..."
+    oc apply -f regex_deployments.yaml
+    @echo "Configuration written to detectors_config.yaml"
+
+# Delete all regex detector deployments
+clean:
+    @echo "Cleaning up all regex detector resources..."
+    oc delete deployment,service,route -l app=fmstack-nlp || true
+    rm -f detectors_config.yaml, regex_deployments.yaml
+    @echo "Cleanup completed"
+
+# List all deployed regex detectors
+list:
+    @echo "\nDeployments:"
+    @oc get deployments -l app=fmstack-nlp | grep regex-detector || true
+    @echo "\nServices:"
+    @oc get services -l app=fmstack-nlp | grep regex-detector || true
+    @echo "\nRoutes:"
+    @oc get routes -l app=fmstack-nlp | grep regex-detector || true
+
+# Show route URLs for all detectors
+urls:
+    @echo "Route URLs:"
+    @oc get routes -l app=fmstack-nlp -o custom-columns=NAME:.metadata.name,URL:.spec.host
+
+# Show generated detector configuration
+config:
+    @echo "Detector Configuration:"
+    @cat detectors_config.yaml

@@ -1,0 +1,97 @@
+#################################### Deployment Spec ####################################
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: regex-detector
+  labels:
+    app: fmstack-nlp
+    component: regex-detector
+    deploy-name: regex-detector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fmstack-nlp
+      component: regex-detector
+      deploy-name: regex-detector
+  template:
+    metadata:
+      labels:
+        app: fmstack-nlp
+        component: regex-detector
+        deploy-name: regex-detector
+    spec:
+      serviceAccountName: user-one
+      containers:
+        - name: regex-detector
+          image: 'quay.io/rh-ee-mmisiura/local-detectors:pull_request'
+          command: ["/app/target/release/local-detectors"]  # Updated path to match Dockerfile
+          env:
+            - name: HOST
+              value: "0.0.0.0"
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            limits:
+              cpu: '500m'
+              memory: 1Gi
+            requests:
+              cpu: '500m'
+              memory: 1Gi
+          securityContext:
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+            runAsNonRoot: true
+            readOnlyRootFilesystem: false  # Changed to false because the app might need to write temporary files
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+          imagePullPolicy: Always
+
+---
+#################################### Service Spec #####################################
+kind: Service
+apiVersion: v1
+metadata:
+  name: regex-detector
+  labels:
+    app: fmstack-nlp
+    component: regex-detector
+spec:
+  type: ClusterIP
+  ipFamilies:
+    - IPv4
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+  internalTrafficPolicy: Cluster
+  ipFamilyPolicy: SingleStack
+  sessionAffinity: None
+  selector:
+    app: fmstack-nlp
+    component: regex-detector
+    deploy-name: regex-detector
+
+---
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: regex-route
+  labels:
+    app: fmstack-nlp
+    component: regex-detector
+  annotations:
+    openshift.io/host.generated: "true"
+spec:
+  to:
+    kind: Service
+    name: regex-detector
+    weight: 100
+  port:
+    targetPort: 8080
