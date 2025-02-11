@@ -61,9 +61,23 @@ class ContentDetection(Safety, ShieldsProtocolPrivate):
             return result
 
     async def _call_detector_api(
-        self, content: str, detector: BaseContentDetectionConfig
+        self,
+        content: str,
+        detector: BaseContentDetectionConfig,
+        params: Dict[str, Any] = None,
     ) -> Dict:
         request = {"contents": [content]}
+
+        # Use detector params from either runtime params, detector config, or global config
+        detector_params = None
+        if params and "detector_params" in params:
+            detector_params = params["detector_params"]
+        elif detector.detector_params:
+            detector_params = detector.detector_params
+
+        if detector_params:
+            request["detector_params"] = detector_params
+
         logger.debug(f"Calling detector {detector.detector_id} with request: {request}")
 
         async with httpx.AsyncClient() as client:
@@ -85,10 +99,12 @@ class ContentDetection(Safety, ShieldsProtocolPrivate):
             logger.debug(f"Detector {detector.detector_id} response: {result}")
             return result
 
-    async def _call_all_detectors(self, content: str) -> List[Dict]:
+    async def _call_all_detectors(
+        self, content: str, params: Dict[str, Any] = None
+    ) -> List[Dict]:
         tasks = []
         for detector in self.config.detectors:
-            tasks.append(self._call_detector_api(content, detector))
+            tasks.append(self._call_detector_api(content, detector, params))
 
         results = await asyncio.gather(*tasks)
         return results
@@ -177,7 +193,7 @@ class ContentDetection(Safety, ShieldsProtocolPrivate):
                         )
             else:
                 for content in contents:
-                    results = await self._call_all_detectors(content)
+                    results = await self._call_all_detectors(content, params)
                     detections = []
 
                     for idx, result in enumerate(results):

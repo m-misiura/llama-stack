@@ -11,6 +11,7 @@ class BaseContentDetectionConfig:
     base_url: str
     detector_id: str
     confidence_threshold: float = 0.5
+    detector_params: Optional[Dict[str, List[str]]] = None
 
 
 @json_schema_type
