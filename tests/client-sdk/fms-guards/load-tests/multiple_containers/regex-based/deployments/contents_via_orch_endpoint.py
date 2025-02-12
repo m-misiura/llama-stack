@@ -42,13 +42,18 @@ def generate_detector_configs(num_detectors: int = 6) -> Dict[str, Dict]:
     }
 
 
-async def run_single_test(adapter, case: TestCase) -> TestResult:
+async def run_single_test(
+    adapter, case: TestCase, num_detectors: int = 6
+) -> TestResult:
     start_time = time.time()
     try:
         messages = [UserMessage(role="user", content=case.content)]
 
         # Match the format from successful curl request
-        params = {"detectors": generate_detector_configs(6), "content": case.content}
+        params = {
+            "detectors": generate_detector_configs(num_detectors),
+            "content": case.content,
+        }
 
         response = await adapter.run_shield("test-shield", messages, params)
 
