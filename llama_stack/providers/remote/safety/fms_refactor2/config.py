@@ -123,6 +123,18 @@ class FMSSafetyProviderConfig:
                 raise ValueError(
                     "orchestrator_base_url is required when use_orchestrator_api is True"
                 )
+            # Check for invalid base_url configurations
+            invalid_detectors = [
+                detector_id
+                for detector_id, detector in self.detectors.items()
+                if detector.base_url is not None
+            ]
+
+            if invalid_detectors:
+                raise ValueError(
+                    f"When using orchestrator API, base_url should not be specified for detectors: {invalid_detectors}. "
+                    "All requests will be routed through the orchestrator_base_url."
+                )
 
             # Propagate orchestrator settings to all detectors
             for detector in self.detectors.values():
