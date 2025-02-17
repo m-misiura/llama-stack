@@ -118,6 +118,28 @@ class FMSSafetyProviderConfig:
 
     def __post_init__(self):
         """Validate and propagate orchestrator configuration"""
+
+        # Check for mixed API usage
+        mixed_api_detectors = {
+            detector_id: detector.use_orchestrator_api
+            for detector_id, detector in self.detectors.items()
+        }
+
+        orchestrator_detectors = [
+            d_id for d_id, uses_orch in mixed_api_detectors.items() if uses_orch
+        ]
+        direct_detectors = [
+            d_id for d_id, uses_orch in mixed_api_detectors.items() if not uses_orch
+        ]
+
+        if orchestrator_detectors and direct_detectors:
+            raise ValueError(
+                "Mixed API usage detected. All detectors must use either direct or orchestrator API:\n"
+                f"- Orchestrator API detectors: {orchestrator_detectors}\n"
+                f"- Direct API detectors: {direct_detectors}\n"
+                "Please configure all detectors consistently."
+            )
+
         if self.use_orchestrator_api:
             if not self.orchestrator_base_url:
                 raise ValueError(
