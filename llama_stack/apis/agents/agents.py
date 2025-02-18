@@ -15,20 +15,20 @@ from typing import (
     Literal,
     Optional,
     Protocol,
-    runtime_checkable,
     Union,
+    runtime_checkable,
 )
 
-from llama_models.schema_utils import json_schema_type, register_schema, webmethod
 from pydantic import BaseModel, ConfigDict, Field
 
-from llama_stack.apis.common.content_types import ContentDelta, InterleavedContent, URL
+from llama_stack.apis.common.content_types import URL, ContentDelta, InterleavedContent
 from llama_stack.apis.inference import (
     CompletionMessage,
     ResponseFormat,
     SamplingParams,
     ToolCall,
     ToolChoice,
+    ToolConfig,
     ToolPromptFormat,
     ToolResponse,
     ToolResponseMessage,
@@ -37,6 +37,7 @@ from llama_stack.apis.inference import (
 from llama_stack.apis.safety import SafetyViolation
 from llama_stack.apis.tools import ToolDef
 from llama_stack.providers.utils.telemetry.trace_protocol import trace_protocol
+from llama_stack.schema_utils import json_schema_type, register_schema, webmethod
 
 
 class Attachment(BaseModel):
@@ -116,7 +117,7 @@ class Turn(BaseModel):
     ]
     steps: List[Step]
     output_message: CompletionMessage
-    output_attachments: List[Attachment] = Field(default_factory=list)
+    output_attachments: Optional[List[Attachment]] = Field(default_factory=list)
 
     started_at: datetime
     completed_at: Optional[datetime] = None
@@ -153,17 +154,32 @@ class AgentConfigCommon(BaseModel):
     output_shields: Optional[List[str]] = Field(default_factory=list)
     toolgroups: Optional[List[AgentToolGroup]] = Field(default_factory=list)
     client_tools: Optional[List[ToolDef]] = Field(default_factory=list)
-    tool_choice: Optional[ToolChoice] = Field(default=ToolChoice.auto)
-    tool_prompt_format: Optional[ToolPromptFormat] = Field(default=None)
+    tool_choice: Optional[ToolChoice] = Field(default=None, deprecated="use tool_config instead")
+    tool_prompt_format: Optional[ToolPromptFormat] = Field(default=None, deprecated="use tool_config instead")
+    tool_config: Optional[ToolConfig] = Field(default=None)
 
-    max_infer_iters: int = 10
+    max_infer_iters: Optional[int] = 10
+
+    def model_post_init(self, __context):
+        if self.tool_config:
+            if self.tool_choice and self.tool_config.tool_choice != self.tool_choice:
+                raise ValueError("tool_choice is deprecated. Use tool_choice in tool_config instead.")
+            if self.tool_prompt_format and self.tool_config.tool_prompt_format != self.tool_prompt_format:
+                raise ValueError("tool_prompt_format is deprecated. Use tool_prompt_format in tool_config instead.")
+        else:
+            params = {}
+            if self.tool_choice:
+                params["tool_choice"] = self.tool_choice
+            if self.tool_prompt_format:
+                params["tool_prompt_format"] = self.tool_prompt_format
+            self.tool_config = ToolConfig(**params)
 
 
 @json_schema_type
 class AgentConfig(AgentConfigCommon):
     model: str
     instructions: str
-    enable_session_persistence: bool
+    enable_session_persistence: Optional[bool] = False
     response_format: Optional[ResponseFormat] = None
 
 
@@ -268,6 +284,7 @@ class AgentTurnCreateRequest(AgentConfigOverridablePerTurn):
     toolgroups: Optional[List[AgentToolGroup]] = None
 
     stream: Optional[bool] = False
+    tool_config: Optional[ToolConfig] = None
 
 
 @json_schema_type
@@ -315,9 +332,13 @@ class Agents(Protocol):
         stream: Optional[bool] = False,
         documents: Optional[List[Document]] = None,
         toolgroups: Optional[List[AgentToolGroup]] = None,
+        tool_config: Optional[ToolConfig] = None,
     ) -> Union[Turn, AsyncIterator[AgentTurnResponseStreamChunk]]: ...
 
-    @webmethod(route="/agents/{agent_id}/session/{session_id}/turn/{turn_id}", method="GET")
+    @webmethod(
+        route="/agents/{agent_id}/session/{session_id}/turn/{turn_id}",
+        method="GET",
+    )
     async def get_agents_turn(
         self,
         agent_id: str,

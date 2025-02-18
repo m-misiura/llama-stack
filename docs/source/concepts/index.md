@@ -42,7 +42,7 @@ Some of these APIs are associated with a set of **Resources**. Here is the mappi
 - **Tool Runtime** is associated with `ToolGroup` resources.
 - **DatasetIO** is associated with `Dataset` resources.
 - **Scoring** is associated with `ScoringFunction` resources.
-- **Eval** is associated with `Model` and `EvalTask` resources.
+- **Eval** is associated with `Model` and `Benchmark` resources.
 
 Furthermore, we allow these resources to be **federated** across multiple providers. For example, you may have some Llama models served by Fireworks while others are served by AWS Bedrock. Regardless, they will all work seamlessly with the same uniform Inference API provided by Llama Stack.
 
@@ -62,10 +62,3 @@ While there is a lot of flexibility to mix-and-match providers, often users will
 
 
 **On-device Distro**: Finally, you may want to run Llama Stack directly on an edge device (mobile phone or a tablet.) We provide Distros for iOS and Android (coming soon.)
-
-```{toctree}
-:maxdepth: 1
-:hidden:
-
-distributions/index
-```

@@ -8,7 +8,6 @@ import logging
 from typing import AsyncGenerator, List, Optional, Union
 
 import httpx
-from llama_models.datatypes import CoreModelId
 from llama_models.llama3.api.chat_format import ChatFormat
 from llama_models.llama3.api.tokenizer import Tokenizer
 from ollama import AsyncClient
@@ -34,16 +33,17 @@ from llama_stack.apis.inference import (
     ToolPromptFormat,
 )
 from llama_stack.apis.models import Model, ModelType
+from llama_stack.models.llama.datatypes import CoreModelId
 from llama_stack.providers.datatypes import ModelsProtocolPrivate
 from llama_stack.providers.utils.inference.model_registry import (
+    ModelRegistryHelper,
     build_model_alias,
     build_model_alias_with_just_provider_model_id,
-    ModelRegistryHelper,
 )
 from llama_stack.providers.utils.inference.openai_compat import (
-    get_sampling_options,
     OpenAICompatCompletionChoice,
     OpenAICompatCompletionResponse,
+    get_sampling_options,
     process_chat_completion_response,
     process_chat_completion_stream_response,
     process_completion_response,
@@ -304,7 +304,7 @@ class OllamaInferenceAdapter(Inference, ModelsProtocolPrivate):
         response = OpenAICompatCompletionResponse(
             choices=[choice],
         )
-        return process_chat_completion_response(response, self.formatter)
+        return process_chat_completion_response(response, self.formatter, request)
 
     async def _stream_chat_completion(self, request: ChatCompletionRequest) -> AsyncGenerator:
         params = await self._get_params(request)
@@ -330,7 +330,7 @@ class OllamaInferenceAdapter(Inference, ModelsProtocolPrivate):
                 )
 
         stream = _generate_and_convert_to_openai_compat()
-        async for chunk in process_chat_completion_stream_response(stream, self.formatter):
+        async for chunk in process_chat_completion_stream_response(stream, self.formatter, request):
             yield chunk
 
     async def embeddings(
@@ -352,24 +352,20 @@ class OllamaInferenceAdapter(Inference, ModelsProtocolPrivate):
         return EmbeddingsResponse(embeddings=embeddings)
 
     async def register_model(self, model: Model) -> Model:
-        # ollama does not have embedding models running. Check if the model is in list of available models.
-        if model.model_type == ModelType.embedding:
-            response = await self.client.list()
+        async def check_model_availability(model_id: str):
+            response = await self.client.ps()
             available_models = [m["model"] for m in response["models"]]
-            if model.provider_resource_id not in available_models:
+            if model_id not in available_models:
                 raise ValueError(
-                    f"Model '{model.provider_resource_id}' is not available in Ollama. "
-                    f"Available models: {', '.join(available_models)}"
+                    f"Model '{model_id}' is not available in Ollama. Available models: {', '.join(available_models)}"
                 )
+
+        if model.model_type == ModelType.embedding:
+            await check_model_availability(model.provider_resource_id)
             return model
+
         model = await self.register_helper.register_model(model)
-        models = await self.client.ps()
-        available_models = [m["model"] for m in models["models"]]
-        if model.provider_resource_id not in available_models:
-            raise ValueError(
-                f"Model '{model.provider_resource_id}' is not available in Ollama. "
-                f"Available models: {', '.join(available_models)}"
-            )
+        await check_model_availability(model.provider_resource_id)
 
         return model
 

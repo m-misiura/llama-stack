@@ -25,7 +25,12 @@ from llama_stack.apis.agents import (
     Session,
     Turn,
 )
-from llama_stack.apis.inference import Inference, ToolResponseMessage, UserMessage
+from llama_stack.apis.inference import (
+    Inference,
+    ToolConfig,
+    ToolResponseMessage,
+    UserMessage,
+)
 from llama_stack.apis.safety import Safety
 from llama_stack.apis.tools import ToolGroups, ToolRuntime
 from llama_stack.apis.vector_io import VectorIO
@@ -140,6 +145,7 @@ class MetaReferenceAgentsImpl(Agents):
         toolgroups: Optional[List[AgentToolGroup]] = None,
         documents: Optional[List[Document]] = None,
         stream: Optional[bool] = False,
+        tool_config: Optional[ToolConfig] = None,
     ) -> AsyncGenerator:
         request = AgentTurnCreateRequest(
             agent_id=agent_id,
@@ -148,6 +154,7 @@ class MetaReferenceAgentsImpl(Agents):
             stream=True,
             toolgroups=toolgroups,
             documents=documents,
+            tool_config=tool_config,
         )
         if stream:
             return self._create_agent_turn_streaming(request)
@@ -205,3 +212,6 @@ class MetaReferenceAgentsImpl(Agents):
 
     async def delete_agent(self, agent_id: str) -> None:
         await self.persistence_store.delete(f"agent:{agent_id}")
+
+    async def shutdown(self) -> None:
+        pass

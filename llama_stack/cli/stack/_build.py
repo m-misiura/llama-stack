@@ -21,12 +21,11 @@ from prompt_toolkit.validation import Validator
 from termcolor import cprint
 
 from llama_stack.cli.table import print_table
-
 from llama_stack.distribution.build import (
+    SERVER_DEPENDENCIES,
+    ImageType,
     build_image,
     get_provider_dependencies,
-    ImageType,
-    SERVER_DEPENDENCIES,
 )
 from llama_stack.distribution.datatypes import (
     BuildConfig,
@@ -56,7 +55,7 @@ def available_templates_specs() -> Dict[str, BuildConfig]:
     return template_specs
 
 
-def run_stack_build_command(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+def run_stack_build_command(args: argparse.Namespace) -> None:
     if args.list_templates:
         return _run_template_list_cmd()
 

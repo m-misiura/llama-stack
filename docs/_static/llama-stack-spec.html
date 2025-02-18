@@ -6,17 +6,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>OpenAPI specification</title>
     <link href="https://fonts.googleapis.com/css?family=Montserrat:300,400,700|Roboto:300,400,700" rel="stylesheet">
+    <script type="module" src="https://unpkg.com/@stoplight/elements/web-components.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/@stoplight/elements/styles.min.css">
     <style>
         body {
             margin: 0;
             padding: 0;
+            height: 100vh;
         }
 
+        elements-api {
+            height: 100%;
+        }
     </style>
-    <script defer="defer" src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
-    <script defer="defer">
+</head>
+
+<body>
+    <elements-api id="openapi-container" router="hash" layout="sidebar" hideExport="true"
+        hideInternal="true"></elements-api>
+
+    <script>
         document.addEventListener("DOMContentLoaded", function () {
-            spec = {
+            const spec = {
     "openapi": "3.1.0",
     "info": {
         "title": "Llama Stack Specification",
@@ -29,6 +40,286 @@
         }
     ],
     "paths": {
+        "/v1/eval/tasks/{task_id}/evaluations": {
+            "post": {
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/EvaluateResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Eval"
+                ],
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DeprecatedEvaluateRowsRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "deprecated": true
+            }
+        },
+        "/v1/eval-tasks/{eval_task_id}": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "$ref": "#/components/schemas/Benchmark"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Benchmarks"
+                ],
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "eval_task_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "deprecated": true
+            }
+        },
+        "/v1/eval/tasks/{task_id}/jobs/{job_id}": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "$ref": "#/components/schemas/JobStatus"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Eval"
+                ],
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "deprecated": true
+            },
+            "delete": {
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                },
+                "tags": [
+                    "Eval"
+                ],
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "deprecated": true
+            }
+        },
+        "/v1/eval/tasks/{task_id}/jobs/{job_id}/result": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/EvaluateResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Eval"
+                ],
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "name": "job_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "deprecated": true
+            }
+        },
+        "/v1/eval-tasks": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListBenchmarksResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Benchmarks"
+                ],
+                "description": "",
+                "parameters": [],
+                "deprecated": true
+            },
+            "post": {
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                },
+                "tags": [
+                    "Benchmarks"
+                ],
+                "description": "",
+                "parameters": [],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DeprecatedRegisterEvalTaskRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "deprecated": true
+            }
+        },
+        "/v1/eval/tasks/{task_id}/jobs": {
+            "post": {
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Job"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Eval"
+                ],
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/DeprecatedRunEvalRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "deprecated": true
+            }
+        },
         "/v1/datasetio/rows": {
             "get": {
                 "responses": {
@@ -46,6 +337,7 @@
                 "tags": [
                     "DatasetIO"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "dataset_id",
@@ -90,6 +382,7 @@
                 "tags": [
                     "DatasetIO"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -120,6 +413,7 @@
                 "tags": [
                     "BatchInference (Coming Soon)"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -150,6 +444,7 @@
                 "tags": [
                     "BatchInference (Coming Soon)"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -173,6 +468,7 @@
                 "tags": [
                     "PostTraining (Coming Soon)"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -208,7 +504,7 @@
                 "tags": [
                     "Inference"
                 ],
-                "summary": "Generate a chat completion for the given messages using the specified model.",
+                "description": "Generate a chat completion for the given messages using the specified model.",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -244,7 +540,7 @@
                 "tags": [
                     "Inference"
                 ],
-                "summary": "Generate a completion for the given content using the specified model.",
+                "description": "Generate a completion for the given content using the specified model.",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -275,6 +571,7 @@
                 "tags": [
                     "Agents"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -305,6 +602,7 @@
                 "tags": [
                     "Agents"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "agent_id",
@@ -349,6 +647,7 @@
                 "tags": [
                     "Agents"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "agent_id",
@@ -389,6 +688,7 @@
                 "tags": [
                     "Agents"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "agent_id",
@@ -418,6 +718,7 @@
                 "tags": [
                     "Agents"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "session_id",
@@ -457,6 +758,7 @@
                 "tags": [
                     "Agents"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "session_id",
@@ -494,7 +796,7 @@
                 "tags": [
                     "Inference"
                 ],
-                "summary": "Generate embeddings for content pieces using the specified model.",
+                "description": "Generate embeddings for content pieces using the specified model.",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -508,7 +810,7 @@
                 }
             }
         },
-        "/v1/eval/tasks/{task_id}/evaluations": {
+        "/v1/eval/benchmarks/{benchmark_id}/evaluations": {
             "post": {
                 "responses": {
                     "200": {
@@ -525,9 +827,10 @@
                 "tags": [
                     "Eval"
                 ],
+                "description": "",
                 "parameters": [
                     {
-                        "name": "task_id",
+                        "name": "benchmark_id",
                         "in": "path",
                         "required": true,
                         "schema": {
@@ -564,6 +867,7 @@
                 "tags": [
                     "Agents"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "agent_id",
@@ -617,6 +921,7 @@
                 "tags": [
                     "Agents"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "agent_id",
@@ -636,6 +941,43 @@
                     },
                     {
                         "name": "turn_id",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ]
+            }
+        },
+        "/v1/eval/benchmarks/{benchmark_id}": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "oneOf": [
+                                        {
+                                            "$ref": "#/components/schemas/Benchmark"
+                                        },
+                                        {
+                                            "type": "null"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Benchmarks"
+                ],
+                "description": "",
+                "parameters": [
+                    {
+                        "name": "benchmark_id",
                         "in": "path",
                         "required": true,
                         "schema": {
@@ -669,6 +1011,7 @@
                 "tags": [
                     "Datasets"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "dataset_id",
@@ -689,45 +1032,10 @@
                 "tags": [
                     "Datasets"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "dataset_id",
-                        "in": "path",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                ]
-            }
-        },
-        "/v1/eval-tasks/{eval_task_id}": {
-            "get": {
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "oneOf": [
-                                        {
-                                            "$ref": "#/components/schemas/EvalTask"
-                                        },
-                                        {
-                                            "type": "null"
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    }
-                },
-                "tags": [
-                    "EvalTasks"
-                ],
-                "parameters": [
-                    {
-                        "name": "eval_task_id",
                         "in": "path",
                         "required": true,
                         "schema": {
@@ -761,6 +1069,7 @@
                 "tags": [
                     "Models"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "model_id",
@@ -781,6 +1090,7 @@
                 "tags": [
                     "Models"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "model_id",
@@ -817,6 +1127,7 @@
                 "tags": [
                     "ScoringFunctions"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "scoring_fn_id",
@@ -853,6 +1164,7 @@
                 "tags": [
                     "Shields"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "identifier",
@@ -882,6 +1194,7 @@
                 "tags": [
                     "Telemetry"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "trace_id",
@@ -919,6 +1232,7 @@
                 "tags": [
                     "Telemetry"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "span_id",
@@ -967,6 +1281,7 @@
                 "tags": [
                     "ToolGroups"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "tool_name",
@@ -996,6 +1311,7 @@
                 "tags": [
                     "ToolGroups"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "toolgroup_id",
@@ -1016,7 +1332,7 @@
                 "tags": [
                     "ToolGroups"
                 ],
-                "summary": "Unregister a tool group",
+                "description": "Unregister a tool group",
                 "parameters": [
                     {
                         "name": "toolgroup_id",
@@ -1046,6 +1362,7 @@
                 "tags": [
                     "Telemetry"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "trace_id",
@@ -1082,6 +1399,7 @@
                 "tags": [
                     "PostTraining (Coming Soon)"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "job_uuid",
@@ -1118,6 +1436,7 @@
                 "tags": [
                     "PostTraining (Coming Soon)"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "job_uuid",
@@ -1147,6 +1466,7 @@
                 "tags": [
                     "PostTraining (Coming Soon)"
                 ],
+                "description": "",
                 "parameters": []
             }
         },
@@ -1174,6 +1494,7 @@
                 "tags": [
                     "VectorDBs"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "vector_db_id",
@@ -1194,6 +1515,7 @@
                 "tags": [
                     "VectorDBs"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "vector_db_id",
@@ -1223,6 +1545,7 @@
                 "tags": [
                     "Inspect"
                 ],
+                "description": "",
                 "parameters": []
             }
         },
@@ -1236,7 +1559,7 @@
                 "tags": [
                     "ToolRuntime"
                 ],
-                "summary": "Index documents so they can be used by the RAG system",
+                "description": "Index documents so they can be used by the RAG system",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1260,6 +1583,7 @@
                 "tags": [
                     "VectorIO"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1290,7 +1614,7 @@
                 "tags": [
                     "ToolRuntime"
                 ],
-                "summary": "Run a tool with the given arguments",
+                "description": "Run a tool with the given arguments",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1304,7 +1628,7 @@
                 }
             }
         },
-        "/v1/eval/tasks/{task_id}/jobs/{job_id}": {
+        "/v1/eval/benchmarks/{benchmark_id}/jobs/{job_id}": {
             "get": {
                 "responses": {
                     "200": {
@@ -1328,9 +1652,10 @@
                 "tags": [
                     "Eval"
                 ],
+                "description": "",
                 "parameters": [
                     {
-                        "name": "task_id",
+                        "name": "benchmark_id",
                         "in": "path",
                         "required": true,
                         "schema": {
@@ -1356,9 +1681,10 @@
                 "tags": [
                     "Eval"
                 ],
+                "description": "",
                 "parameters": [
                     {
-                        "name": "task_id",
+                        "name": "benchmark_id",
                         "in": "path",
                         "required": true,
                         "schema": {
@@ -1376,7 +1702,7 @@
                 ]
             }
         },
-        "/v1/eval/tasks/{task_id}/jobs/{job_id}/result": {
+        "/v1/eval/benchmarks/{benchmark_id}/jobs/{job_id}/result": {
             "get": {
                 "responses": {
                     "200": {
@@ -1393,9 +1719,10 @@
                 "tags": [
                     "Eval"
                 ],
+                "description": "",
                 "parameters": [
                     {
-                        "name": "job_id",
+                        "name": "benchmark_id",
                         "in": "path",
                         "required": true,
                         "schema": {
@@ -1403,7 +1730,7 @@
                         }
                     },
                     {
-                        "name": "task_id",
+                        "name": "job_id",
                         "in": "path",
                         "required": true,
                         "schema": {
@@ -1411,6 +1738,49 @@
                         }
                     }
                 ]
+            }
+        },
+        "/v1/eval/benchmarks": {
+            "get": {
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ListBenchmarksResponse"
+                                }
+                            }
+                        }
+                    }
+                },
+                "tags": [
+                    "Benchmarks"
+                ],
+                "description": "",
+                "parameters": []
+            },
+            "post": {
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                },
+                "tags": [
+                    "Benchmarks"
+                ],
+                "description": "",
+                "parameters": [],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/RegisterBenchmarkRequest"
+                            }
+                        }
+                    },
+                    "required": true
+                }
             }
         },
         "/v1/datasets": {
@@ -1430,6 +1800,7 @@
                 "tags": [
                     "Datasets"
                 ],
+                "description": "",
                 "parameters": []
             },
             "post": {
@@ -1441,53 +1812,13 @@
                 "tags": [
                     "Datasets"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
                         "application/json": {
                             "schema": {
                                 "$ref": "#/components/schemas/RegisterDatasetRequest"
-                            }
-                        }
-                    },
-                    "required": true
-                }
-            }
-        },
-        "/v1/eval-tasks": {
-            "get": {
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "content": {
-                            "application/json": {
-                                "schema": {
-                                    "$ref": "#/components/schemas/ListEvalTasksResponse"
-                                }
-                            }
-                        }
-                    }
-                },
-                "tags": [
-                    "EvalTasks"
-                ],
-                "parameters": []
-            },
-            "post": {
-                "responses": {
-                    "200": {
-                        "description": "OK"
-                    }
-                },
-                "tags": [
-                    "EvalTasks"
-                ],
-                "parameters": [],
-                "requestBody": {
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/RegisterEvalTaskRequest"
                             }
                         }
                     },
@@ -1512,6 +1843,7 @@
                 "tags": [
                     "Models"
                 ],
+                "description": "",
                 "parameters": []
             },
             "post": {
@@ -1530,6 +1862,7 @@
                 "tags": [
                     "Models"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1560,6 +1893,7 @@
                 "tags": [
                     "Inspect"
                 ],
+                "description": "",
                 "parameters": []
             }
         },
@@ -1580,6 +1914,7 @@
                 "tags": [
                     "Inspect"
                 ],
+                "description": "",
                 "parameters": []
             }
         },
@@ -1600,6 +1935,7 @@
                 "tags": [
                     "ToolRuntime"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "tool_group_id",
@@ -1637,6 +1973,7 @@
                 "tags": [
                     "ScoringFunctions"
                 ],
+                "description": "",
                 "parameters": []
             },
             "post": {
@@ -1648,6 +1985,7 @@
                 "tags": [
                     "ScoringFunctions"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1678,6 +2016,7 @@
                 "tags": [
                     "Shields"
                 ],
+                "description": "",
                 "parameters": []
             },
             "post": {
@@ -1696,6 +2035,7 @@
                 "tags": [
                     "Shields"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1726,7 +2066,7 @@
                 "tags": [
                     "ToolGroups"
                 ],
-                "summary": "List tool groups with optional provider",
+                "description": "List tool groups with optional provider",
                 "parameters": []
             },
             "post": {
@@ -1738,7 +2078,7 @@
                 "tags": [
                     "ToolGroups"
                 ],
-                "summary": "Register a tool group",
+                "description": "Register a tool group",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1769,7 +2109,7 @@
                 "tags": [
                     "ToolGroups"
                 ],
-                "summary": "List tools with optional tool group",
+                "description": "List tools with optional tool group",
                 "parameters": [
                     {
                         "name": "toolgroup_id",
@@ -1799,6 +2139,7 @@
                 "tags": [
                     "VectorDBs"
                 ],
+                "description": "",
                 "parameters": []
             },
             "post": {
@@ -1817,6 +2158,7 @@
                 "tags": [
                     "VectorDBs"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1840,6 +2182,7 @@
                 "tags": [
                     "Telemetry"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1870,6 +2213,7 @@
                 "tags": [
                     "PostTraining (Coming Soon)"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1900,7 +2244,7 @@
                 "tags": [
                     "ToolRuntime"
                 ],
-                "summary": "Query the RAG system for context; typically invoked by the agent",
+                "description": "Query the RAG system for context; typically invoked by the agent",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1931,6 +2275,7 @@
                 "tags": [
                     "VectorIO"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -1961,6 +2306,7 @@
                 "tags": [
                     "Telemetry"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "attribute_filters",
@@ -2012,6 +2358,7 @@
                 "tags": [
                     "Telemetry"
                 ],
+                "description": "",
                 "parameters": [
                     {
                         "name": "attribute_filters",
@@ -2054,7 +2401,7 @@
                 ]
             }
         },
-        "/v1/eval/tasks/{task_id}/jobs": {
+        "/v1/eval/benchmarks/{benchmark_id}/jobs": {
             "post": {
                 "responses": {
                     "200": {
@@ -2071,9 +2418,10 @@
                 "tags": [
                     "Eval"
                 ],
+                "description": "",
                 "parameters": [
                     {
-                        "name": "task_id",
+                        "name": "benchmark_id",
                         "in": "path",
                         "required": true,
                         "schema": {
@@ -2110,6 +2458,7 @@
                 "tags": [
                     "Safety"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -2133,6 +2482,7 @@
                 "tags": [
                     "Telemetry"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -2163,6 +2513,7 @@
                 "tags": [
                     "Scoring"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -2193,6 +2544,7 @@
                 "tags": [
                     "Scoring"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -2223,6 +2575,7 @@
                 "tags": [
                     "PostTraining (Coming Soon)"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -2253,6 +2606,7 @@
                 "tags": [
                     "SyntheticDataGeneration (Coming Soon)"
                 ],
+                "description": "",
                 "parameters": [],
                 "requestBody": {
                     "content": {
@@ -2283,6 +2637,7 @@
                 "tags": [
                     "Inspect"
                 ],
+                "description": "",
                 "parameters": []
             }
         }
@@ -2290,85 +2645,216 @@
     "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
     "components": {
         "schemas": {
-            "AppendRowsRequest": {
+            "AgentCandidate": {
                 "type": "object",
                 "properties": {
-                    "dataset_id": {
-                        "type": "string"
+                    "type": {
+                        "type": "string",
+                        "const": "agent",
+                        "default": "agent"
                     },
-                    "rows": {
+                    "config": {
+                        "$ref": "#/components/schemas/AgentConfig"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "type",
+                    "config"
+                ]
+            },
+            "AgentConfig": {
+                "type": "object",
+                "properties": {
+                    "sampling_params": {
+                        "$ref": "#/components/schemas/SamplingParams"
+                    },
+                    "input_shields": {
                         "type": "array",
                         "items": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "oneOf": [
-                                    {
-                                        "type": "null"
-                                    },
-                                    {
-                                        "type": "boolean"
-                                    },
-                                    {
-                                        "type": "number"
-                                    },
-                                    {
-                                        "type": "string"
-                                    },
-                                    {
-                                        "type": "array"
-                                    },
-                                    {
-                                        "type": "object"
-                                    }
-                                ]
+                            "type": "string"
+                        }
+                    },
+                    "output_shields": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "toolgroups": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AgentTool"
+                        }
+                    },
+                    "client_tools": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ToolDef"
+                        }
+                    },
+                    "tool_choice": {
+                        "type": "string",
+                        "enum": [
+                            "auto",
+                            "required"
+                        ],
+                        "description": "Whether tool use is required or automatic. This is a hint to the model which may not be followed. It depends on the Instruction Following capabilities of the model."
+                    },
+                    "tool_prompt_format": {
+                        "type": "string",
+                        "enum": [
+                            "json",
+                            "function_tag",
+                            "python_list"
+                        ],
+                        "description": "Prompt format for calling custom / zero shot tools."
+                    },
+                    "tool_config": {
+                        "$ref": "#/components/schemas/ToolConfig"
+                    },
+                    "max_infer_iters": {
+                        "type": "integer",
+                        "default": 10
+                    },
+                    "model": {
+                        "type": "string"
+                    },
+                    "instructions": {
+                        "type": "string"
+                    },
+                    "enable_session_persistence": {
+                        "type": "boolean",
+                        "default": false
+                    },
+                    "response_format": {
+                        "$ref": "#/components/schemas/ResponseFormat"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "model",
+                    "instructions"
+                ]
+            },
+            "AgentTool": {
+                "oneOf": [
+                    {
+                        "type": "string"
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "name": {
+                                "type": "string"
+                            },
+                            "args": {
+                                "type": "object",
+                                "additionalProperties": {
+                                    "oneOf": [
+                                        {
+                                            "type": "null"
+                                        },
+                                        {
+                                            "type": "boolean"
+                                        },
+                                        {
+                                            "type": "number"
+                                        },
+                                        {
+                                            "type": "string"
+                                        },
+                                        {
+                                            "type": "array"
+                                        },
+                                        {
+                                            "type": "object"
+                                        }
+                                    ]
+                                }
                             }
+                        },
+                        "additionalProperties": false,
+                        "required": [
+                            "name",
+                            "args"
+                        ]
+                    }
+                ]
+            },
+            "AggregationFunctionType": {
+                "type": "string",
+                "enum": [
+                    "average",
+                    "median",
+                    "categorical_count",
+                    "accuracy"
+                ]
+            },
+            "BasicScoringFnParams": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "const": "basic",
+                        "default": "basic"
+                    },
+                    "aggregation_functions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AggregationFunctionType"
                         }
                     }
                 },
                 "additionalProperties": false,
                 "required": [
-                    "dataset_id",
-                    "rows"
+                    "type"
                 ]
             },
-            "CompletionMessage": {
+            "BenchmarkConfig": {
                 "type": "object",
                 "properties": {
-                    "role": {
+                    "type": {
                         "type": "string",
-                        "const": "assistant",
-                        "default": "assistant",
-                        "description": "Must be \"assistant\" to identify this as the model's response"
+                        "const": "benchmark",
+                        "default": "benchmark"
                     },
-                    "content": {
-                        "$ref": "#/components/schemas/InterleavedContent",
-                        "description": "The content of the model's response"
+                    "eval_candidate": {
+                        "$ref": "#/components/schemas/EvalCandidate"
                     },
-                    "stop_reason": {
-                        "type": "string",
-                        "enum": [
-                            "end_of_turn",
-                            "end_of_message",
-                            "out_of_tokens"
-                        ],
-                        "description": "Reason why the model stopped generating. Options are: - `StopReason.end_of_turn`: The model finished generating the entire response. - `StopReason.end_of_message`: The model finished generating but generated a partial response -- usually, a tool call. The user may call the tool and continue the conversation with the tool's response. - `StopReason.out_of_tokens`: The model ran out of token budget."
+                    "scoring_params": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/ScoringFnParams"
+                        }
                     },
-                    "tool_calls": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ToolCall"
-                        },
-                        "description": "List of tool calls. Each tool call is a ToolCall object."
+                    "num_examples": {
+                        "type": "integer"
                     }
                 },
                 "additionalProperties": false,
                 "required": [
-                    "role",
-                    "content",
-                    "stop_reason",
-                    "tool_calls"
+                    "type",
+                    "eval_candidate",
+                    "scoring_params"
+                ]
+            },
+            "EvalCandidate": {
+                "oneOf": [
+                    {
+                        "$ref": "#/components/schemas/ModelCandidate"
+                    },
+                    {
+                        "$ref": "#/components/schemas/AgentCandidate"
+                    }
                 ],
-                "title": "A message containing the model's (assistant) response in a chat conversation."
+                "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                        "model": "#/components/schemas/ModelCandidate",
+                        "agent": "#/components/schemas/AgentCandidate"
+                    }
+                }
             },
             "GrammarResponseFormat": {
                 "type": "object",
@@ -2411,7 +2897,7 @@
                     "type",
                     "bnf"
                 ],
-                "title": "Configuration for grammar-guided response generation."
+                "description": "Configuration for grammar-guided response generation."
             },
             "GreedySamplingStrategy": {
                 "type": "object",
@@ -2458,7 +2944,7 @@
                     "type",
                     "image"
                 ],
-                "title": "A image content item"
+                "description": "A image content item"
             },
             "InterleavedContent": {
                 "oneOf": [
@@ -2534,32 +3020,91 @@
                     "type",
                     "json_schema"
                 ],
-                "title": "Configuration for JSON schema-guided response generation."
+                "description": "Configuration for JSON schema-guided response generation."
             },
-            "Message": {
-                "oneOf": [
-                    {
-                        "$ref": "#/components/schemas/UserMessage"
+            "LLMAsJudgeScoringFnParams": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "const": "llm_as_judge",
+                        "default": "llm_as_judge"
                     },
-                    {
+                    "judge_model": {
+                        "type": "string"
+                    },
+                    "prompt_template": {
+                        "type": "string"
+                    },
+                    "judge_score_regexes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "aggregation_functions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AggregationFunctionType"
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "type",
+                    "judge_model"
+                ]
+            },
+            "ModelCandidate": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "const": "model",
+                        "default": "model"
+                    },
+                    "model": {
+                        "type": "string"
+                    },
+                    "sampling_params": {
+                        "$ref": "#/components/schemas/SamplingParams"
+                    },
+                    "system_message": {
                         "$ref": "#/components/schemas/SystemMessage"
-                    },
-                    {
-                        "$ref": "#/components/schemas/ToolResponseMessage"
-                    },
-                    {
-                        "$ref": "#/components/schemas/CompletionMessage"
                     }
-                ],
-                "discriminator": {
-                    "propertyName": "role",
-                    "mapping": {
-                        "user": "#/components/schemas/UserMessage",
-                        "system": "#/components/schemas/SystemMessage",
-                        "tool": "#/components/schemas/ToolResponseMessage",
-                        "assistant": "#/components/schemas/CompletionMessage"
+                },
+                "additionalProperties": false,
+                "required": [
+                    "type",
+                    "model",
+                    "sampling_params"
+                ]
+            },
+            "RegexParserScoringFnParams": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "const": "regex_parser",
+                        "default": "regex_parser"
+                    },
+                    "parsing_regexes": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "aggregation_functions": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/AggregationFunctionType"
+                        }
                     }
-                }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "type"
+                ]
             },
             "ResponseFormat": {
                 "oneOf": [
@@ -2619,6 +3164,27 @@
                     }
                 }
             },
+            "ScoringFnParams": {
+                "oneOf": [
+                    {
+                        "$ref": "#/components/schemas/LLMAsJudgeScoringFnParams"
+                    },
+                    {
+                        "$ref": "#/components/schemas/RegexParserScoringFnParams"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BasicScoringFnParams"
+                    }
+                ],
+                "discriminator": {
+                    "propertyName": "type",
+                    "mapping": {
+                        "llm_as_judge": "#/components/schemas/LLMAsJudgeScoringFnParams",
+                        "regex_parser": "#/components/schemas/RegexParserScoringFnParams",
+                        "basic": "#/components/schemas/BasicScoringFnParams"
+                    }
+                }
+            },
             "SystemMessage": {
                 "type": "object",
                 "properties": {
@@ -2638,7 +3204,7 @@
                     "role",
                     "content"
                 ],
-                "title": "A system message providing instructions or context to the model."
+                "description": "A system message providing instructions or context to the model."
             },
             "TextContentItem": {
                 "type": "object",
@@ -2659,7 +3225,612 @@
                     "type",
                     "text"
                 ],
-                "title": "A text content item"
+                "description": "A text content item"
+            },
+            "ToolConfig": {
+                "type": "object",
+                "properties": {
+                    "tool_choice": {
+                        "type": "string",
+                        "enum": [
+                            "auto",
+                            "required"
+                        ],
+                        "description": "(Optional) Whether tool use is required or automatic. Defaults to ToolChoice.auto.",
+                        "default": "auto"
+                    },
+                    "tool_prompt_format": {
+                        "type": "string",
+                        "enum": [
+                            "json",
+                            "function_tag",
+                            "python_list"
+                        ],
+                        "description": "(Optional) Instructs the model how to format tool calls. By default, Llama Stack will attempt to use a format that is best adapted to the model. - `ToolPromptFormat.json`: The tool calls are formatted as a JSON object. - `ToolPromptFormat.function_tag`: The tool calls are enclosed in a <function=function_name> tag. - `ToolPromptFormat.python_list`: The tool calls are output as Python syntax -- a list of function calls."
+                    },
+                    "system_message_behavior": {
+                        "type": "string",
+                        "enum": [
+                            "append",
+                            "replace"
+                        ],
+                        "description": "(Optional) Config for how to override the default system prompt. - `SystemMessageBehavior.append`: Appends the provided system message to the default system prompt. - `SystemMessageBehavior.replace`: Replaces the default system prompt with the provided system message. The system message can include the string '{{function_definitions}}' to indicate where the function definitions should be inserted.",
+                        "default": "append"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "system_message_behavior"
+                ],
+                "description": "Configuration for tool use."
+            },
+            "ToolDef": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "parameters": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ToolParameter"
+                        }
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "oneOf": [
+                                {
+                                    "type": "null"
+                                },
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "array"
+                                },
+                                {
+                                    "type": "object"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "name"
+                ]
+            },
+            "ToolParameter": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "parameter_type": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "required": {
+                        "type": "boolean",
+                        "default": true
+                    },
+                    "default": {
+                        "oneOf": [
+                            {
+                                "type": "null"
+                            },
+                            {
+                                "type": "boolean"
+                            },
+                            {
+                                "type": "number"
+                            },
+                            {
+                                "type": "string"
+                            },
+                            {
+                                "type": "array"
+                            },
+                            {
+                                "type": "object"
+                            }
+                        ]
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "name",
+                    "parameter_type",
+                    "description",
+                    "required"
+                ]
+            },
+            "TopKSamplingStrategy": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "const": "top_k",
+                        "default": "top_k"
+                    },
+                    "top_k": {
+                        "type": "integer"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "type",
+                    "top_k"
+                ]
+            },
+            "TopPSamplingStrategy": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "const": "top_p",
+                        "default": "top_p"
+                    },
+                    "temperature": {
+                        "type": "number"
+                    },
+                    "top_p": {
+                        "type": "number",
+                        "default": 0.95
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "type"
+                ]
+            },
+            "URL": {
+                "type": "object",
+                "properties": {
+                    "uri": {
+                        "type": "string"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "uri"
+                ]
+            },
+            "DeprecatedEvaluateRowsRequest": {
+                "type": "object",
+                "properties": {
+                    "input_rows": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "oneOf": [
+                                    {
+                                        "type": "null"
+                                    },
+                                    {
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "type": "number"
+                                    },
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "array"
+                                    },
+                                    {
+                                        "type": "object"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "scoring_functions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "task_config": {
+                        "$ref": "#/components/schemas/BenchmarkConfig"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "input_rows",
+                    "scoring_functions",
+                    "task_config"
+                ]
+            },
+            "EvaluateResponse": {
+                "type": "object",
+                "properties": {
+                    "generations": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "oneOf": [
+                                    {
+                                        "type": "null"
+                                    },
+                                    {
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "type": "number"
+                                    },
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "array"
+                                    },
+                                    {
+                                        "type": "object"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "scores": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "$ref": "#/components/schemas/ScoringResult"
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "generations",
+                    "scores"
+                ]
+            },
+            "ScoringResult": {
+                "type": "object",
+                "properties": {
+                    "score_rows": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "oneOf": [
+                                    {
+                                        "type": "null"
+                                    },
+                                    {
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "type": "number"
+                                    },
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "array"
+                                    },
+                                    {
+                                        "type": "object"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "aggregated_results": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "oneOf": [
+                                {
+                                    "type": "null"
+                                },
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "array"
+                                },
+                                {
+                                    "type": "object"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "score_rows",
+                    "aggregated_results"
+                ]
+            },
+            "Benchmark": {
+                "type": "object",
+                "properties": {
+                    "identifier": {
+                        "type": "string"
+                    },
+                    "provider_resource_id": {
+                        "type": "string"
+                    },
+                    "provider_id": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string",
+                        "const": "benchmark",
+                        "default": "benchmark"
+                    },
+                    "dataset_id": {
+                        "type": "string"
+                    },
+                    "scoring_functions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "oneOf": [
+                                {
+                                    "type": "null"
+                                },
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "array"
+                                },
+                                {
+                                    "type": "object"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "identifier",
+                    "provider_resource_id",
+                    "provider_id",
+                    "type",
+                    "dataset_id",
+                    "scoring_functions",
+                    "metadata"
+                ]
+            },
+            "JobStatus": {
+                "type": "string",
+                "enum": [
+                    "completed",
+                    "in_progress",
+                    "failed",
+                    "scheduled"
+                ]
+            },
+            "ListBenchmarksResponse": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/Benchmark"
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "data"
+                ]
+            },
+            "DeprecatedRegisterEvalTaskRequest": {
+                "type": "object",
+                "properties": {
+                    "eval_task_id": {
+                        "type": "string"
+                    },
+                    "dataset_id": {
+                        "type": "string"
+                    },
+                    "scoring_functions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "provider_benchmark_id": {
+                        "type": "string"
+                    },
+                    "provider_id": {
+                        "type": "string"
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "oneOf": [
+                                {
+                                    "type": "null"
+                                },
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "array"
+                                },
+                                {
+                                    "type": "object"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "eval_task_id",
+                    "dataset_id",
+                    "scoring_functions"
+                ]
+            },
+            "DeprecatedRunEvalRequest": {
+                "type": "object",
+                "properties": {
+                    "task_config": {
+                        "$ref": "#/components/schemas/BenchmarkConfig"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "task_config"
+                ]
+            },
+            "Job": {
+                "type": "object",
+                "properties": {
+                    "job_id": {
+                        "type": "string"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "job_id"
+                ]
+            },
+            "AppendRowsRequest": {
+                "type": "object",
+                "properties": {
+                    "dataset_id": {
+                        "type": "string"
+                    },
+                    "rows": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "oneOf": [
+                                    {
+                                        "type": "null"
+                                    },
+                                    {
+                                        "type": "boolean"
+                                    },
+                                    {
+                                        "type": "number"
+                                    },
+                                    {
+                                        "type": "string"
+                                    },
+                                    {
+                                        "type": "array"
+                                    },
+                                    {
+                                        "type": "object"
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "dataset_id",
+                    "rows"
+                ]
+            },
+            "CompletionMessage": {
+                "type": "object",
+                "properties": {
+                    "role": {
+                        "type": "string",
+                        "const": "assistant",
+                        "default": "assistant",
+                        "description": "Must be \"assistant\" to identify this as the model's response"
+                    },
+                    "content": {
+                        "$ref": "#/components/schemas/InterleavedContent",
+                        "description": "The content of the model's response"
+                    },
+                    "stop_reason": {
+                        "type": "string",
+                        "enum": [
+                            "end_of_turn",
+                            "end_of_message",
+                            "out_of_tokens"
+                        ],
+                        "description": "Reason why the model stopped generating. Options are: - `StopReason.end_of_turn`: The model finished generating the entire response. - `StopReason.end_of_message`: The model finished generating but generated a partial response -- usually, a tool call. The user may call the tool and continue the conversation with the tool's response. - `StopReason.out_of_tokens`: The model ran out of token budget."
+                    },
+                    "tool_calls": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ToolCall"
+                        },
+                        "description": "List of tool calls. Each tool call is a ToolCall object."
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "role",
+                    "content",
+                    "stop_reason"
+                ],
+                "description": "A message containing the model's (assistant) response in a chat conversation."
+            },
+            "Message": {
+                "oneOf": [
+                    {
+                        "$ref": "#/components/schemas/UserMessage"
+                    },
+                    {
+                        "$ref": "#/components/schemas/SystemMessage"
+                    },
+                    {
+                        "$ref": "#/components/schemas/ToolResponseMessage"
+                    },
+                    {
+                        "$ref": "#/components/schemas/CompletionMessage"
+                    }
+                ],
+                "discriminator": {
+                    "propertyName": "role",
+                    "mapping": {
+                        "user": "#/components/schemas/UserMessage",
+                        "system": "#/components/schemas/SystemMessage",
+                        "tool": "#/components/schemas/ToolResponseMessage",
+                        "assistant": "#/components/schemas/CompletionMessage"
+                    }
+                }
             },
             "ToolCall": {
                 "type": "object",
@@ -2874,58 +4045,7 @@
                     "tool_name",
                     "content"
                 ],
-                "title": "A message representing the result of a tool invocation."
-            },
-            "TopKSamplingStrategy": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "const": "top_k",
-                        "default": "top_k"
-                    },
-                    "top_k": {
-                        "type": "integer"
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "type",
-                    "top_k"
-                ]
-            },
-            "TopPSamplingStrategy": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "const": "top_p",
-                        "default": "top_p"
-                    },
-                    "temperature": {
-                        "type": "number"
-                    },
-                    "top_p": {
-                        "type": "number",
-                        "default": 0.95
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "type"
-                ]
-            },
-            "URL": {
-                "type": "object",
-                "properties": {
-                    "uri": {
-                        "type": "string"
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "uri"
-                ]
+                "description": "A message representing the result of a tool invocation."
             },
             "UserMessage": {
                 "type": "object",
@@ -2950,7 +4070,7 @@
                     "role",
                     "content"
                 ],
-                "title": "A message from the user in a chat conversation."
+                "description": "A message from the user in a chat conversation."
             },
             "BatchChatCompletionRequest": {
                 "type": "object",
@@ -2982,7 +4102,7 @@
                             "auto",
                             "required"
                         ],
-                        "title": "Whether tool use is required or automatic. This is a hint to the model which may not be followed. It depends on the Instruction Following capabilities of the model."
+                        "description": "Whether tool use is required or automatic. This is a hint to the model which may not be followed. It depends on the Instruction Following capabilities of the model."
                     },
                     "tool_prompt_format": {
                         "type": "string",
@@ -2991,7 +4111,7 @@
                             "function_tag",
                             "python_list"
                         ],
-                        "title": "Prompt format for calling custom / zero shot tools."
+                        "description": "Prompt format for calling custom / zero shot tools."
                     },
                     "response_format": {
                         "$ref": "#/components/schemas/ResponseFormat"
@@ -3032,6 +4152,12 @@
             "ChatCompletionResponse": {
                 "type": "object",
                 "properties": {
+                    "metrics": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MetricEvent"
+                        }
+                    },
                     "completion_message": {
                         "$ref": "#/components/schemas/CompletionMessage",
                         "description": "The complete response message"
@@ -3048,7 +4174,75 @@
                 "required": [
                     "completion_message"
                 ],
-                "title": "Response from a chat completion request."
+                "description": "Response from a chat completion request."
+            },
+            "MetricEvent": {
+                "type": "object",
+                "properties": {
+                    "trace_id": {
+                        "type": "string"
+                    },
+                    "span_id": {
+                        "type": "string"
+                    },
+                    "timestamp": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "attributes": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "oneOf": [
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "integer"
+                                },
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        }
+                    },
+                    "type": {
+                        "type": "string",
+                        "const": "metric",
+                        "default": "metric"
+                    },
+                    "metric": {
+                        "type": "string"
+                    },
+                    "value": {
+                        "oneOf": [
+                            {
+                                "type": "integer"
+                            },
+                            {
+                                "type": "number"
+                            }
+                        ]
+                    },
+                    "unit": {
+                        "type": "string"
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "trace_id",
+                    "span_id",
+                    "timestamp",
+                    "type",
+                    "metric",
+                    "value",
+                    "unit"
+                ]
             },
             "TokenLogProbs": {
                 "type": "object",
@@ -3065,7 +4259,7 @@
                 "required": [
                     "logprobs_by_token"
                 ],
-                "title": "Log probabilities for generated tokens."
+                "description": "Log probabilities for generated tokens."
             },
             "BatchCompletionRequest": {
                 "type": "object",
@@ -3147,7 +4341,7 @@
                     "content",
                     "stop_reason"
                 ],
-                "title": "Response from a completion request."
+                "description": "Response from a completion request."
             },
             "CancelTrainingJobRequest": {
                 "type": "object",
@@ -3160,43 +4354,6 @@
                 "required": [
                     "job_uuid"
                 ]
-            },
-            "ToolConfig": {
-                "type": "object",
-                "properties": {
-                    "tool_choice": {
-                        "type": "string",
-                        "enum": [
-                            "auto",
-                            "required"
-                        ],
-                        "default": "auto",
-                        "description": "(Optional) Whether tool use is required or automatic. Defaults to ToolChoice.auto."
-                    },
-                    "tool_prompt_format": {
-                        "type": "string",
-                        "enum": [
-                            "json",
-                            "function_tag",
-                            "python_list"
-                        ],
-                        "description": "(Optional) Instructs the model how to format tool calls. By default, Llama Stack will attempt to use a format that is best adapted to the model. - `ToolPromptFormat.json`: The tool calls are formatted as a JSON object. - `ToolPromptFormat.function_tag`: The tool calls are enclosed in a <function=function_name> tag. - `ToolPromptFormat.python_list`: The tool calls are output as Python syntax -- a list of function calls."
-                    },
-                    "system_message_behavior": {
-                        "type": "string",
-                        "enum": [
-                            "append",
-                            "replace"
-                        ],
-                        "default": "append",
-                        "description": "(Optional) Config for how to override the default system prompt. - `SystemMessageBehavior.append`: Appends the provided system message to the default system prompt. - `SystemMessageBehavior.replace`: Replaces the default system prompt with the provided system message. The system message can include the string '{{function_definitions}}' to indicate where the function definitions should be inserted."
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "system_message_behavior"
-                ],
-                "title": "Configuration for tool use."
             },
             "ChatCompletionRequest": {
                 "type": "object",
@@ -3309,11 +4466,17 @@
                     "event_type",
                     "delta"
                 ],
-                "title": "An event during chat completion generation."
+                "description": "An event during chat completion generation."
             },
             "ChatCompletionResponseStreamChunk": {
                 "type": "object",
                 "properties": {
+                    "metrics": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/MetricEvent"
+                        }
+                    },
                     "event": {
                         "$ref": "#/components/schemas/ChatCompletionResponseEvent",
                         "description": "The event containing the new content"
@@ -3323,7 +4486,7 @@
                 "required": [
                     "event"
                 ],
-                "title": "A chunk of a streamed chat completion response."
+                "description": "A chunk of a streamed chat completion response."
             },
             "ContentDelta": {
                 "oneOf": [
@@ -3488,218 +4651,7 @@
                 "required": [
                     "delta"
                 ],
-                "title": "A chunk of a streamed completion response."
-            },
-            "AgentConfig": {
-                "type": "object",
-                "properties": {
-                    "sampling_params": {
-                        "$ref": "#/components/schemas/SamplingParams"
-                    },
-                    "input_shields": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "output_shields": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "toolgroups": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AgentTool"
-                        }
-                    },
-                    "client_tools": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ToolDef"
-                        }
-                    },
-                    "tool_choice": {
-                        "type": "string",
-                        "enum": [
-                            "auto",
-                            "required"
-                        ],
-                        "title": "Whether tool use is required or automatic. This is a hint to the model which may not be followed. It depends on the Instruction Following capabilities of the model.",
-                        "default": "auto"
-                    },
-                    "tool_prompt_format": {
-                        "type": "string",
-                        "enum": [
-                            "json",
-                            "function_tag",
-                            "python_list"
-                        ],
-                        "title": "Prompt format for calling custom / zero shot tools."
-                    },
-                    "max_infer_iters": {
-                        "type": "integer",
-                        "default": 10
-                    },
-                    "model": {
-                        "type": "string"
-                    },
-                    "instructions": {
-                        "type": "string"
-                    },
-                    "enable_session_persistence": {
-                        "type": "boolean"
-                    },
-                    "response_format": {
-                        "$ref": "#/components/schemas/ResponseFormat"
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "max_infer_iters",
-                    "model",
-                    "instructions",
-                    "enable_session_persistence"
-                ]
-            },
-            "AgentTool": {
-                "oneOf": [
-                    {
-                        "type": "string"
-                    },
-                    {
-                        "type": "object",
-                        "properties": {
-                            "name": {
-                                "type": "string"
-                            },
-                            "args": {
-                                "type": "object",
-                                "additionalProperties": {
-                                    "oneOf": [
-                                        {
-                                            "type": "null"
-                                        },
-                                        {
-                                            "type": "boolean"
-                                        },
-                                        {
-                                            "type": "number"
-                                        },
-                                        {
-                                            "type": "string"
-                                        },
-                                        {
-                                            "type": "array"
-                                        },
-                                        {
-                                            "type": "object"
-                                        }
-                                    ]
-                                }
-                            }
-                        },
-                        "additionalProperties": false,
-                        "required": [
-                            "name",
-                            "args"
-                        ]
-                    }
-                ]
-            },
-            "ToolDef": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string"
-                    },
-                    "description": {
-                        "type": "string"
-                    },
-                    "parameters": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/ToolParameter"
-                        }
-                    },
-                    "metadata": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "oneOf": [
-                                {
-                                    "type": "null"
-                                },
-                                {
-                                    "type": "boolean"
-                                },
-                                {
-                                    "type": "number"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "array"
-                                },
-                                {
-                                    "type": "object"
-                                }
-                            ]
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "name"
-                ]
-            },
-            "ToolParameter": {
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string"
-                    },
-                    "parameter_type": {
-                        "type": "string"
-                    },
-                    "description": {
-                        "type": "string"
-                    },
-                    "required": {
-                        "type": "boolean",
-                        "default": true
-                    },
-                    "default": {
-                        "oneOf": [
-                            {
-                                "type": "null"
-                            },
-                            {
-                                "type": "boolean"
-                            },
-                            {
-                                "type": "number"
-                            },
-                            {
-                                "type": "string"
-                            },
-                            {
-                                "type": "array"
-                            },
-                            {
-                                "type": "object"
-                            }
-                        ]
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "name",
-                    "parameter_type",
-                    "description",
-                    "required"
-                ]
+                "description": "A chunk of a streamed completion response."
             },
             "CreateAgentRequest": {
                 "type": "object",
@@ -3808,6 +4760,9 @@
                         "items": {
                             "$ref": "#/components/schemas/AgentTool"
                         }
+                    },
+                    "tool_config": {
+                        "$ref": "#/components/schemas/ToolConfig"
                     }
                 },
                 "additionalProperties": false,
@@ -4142,10 +5097,9 @@
                     "input_messages",
                     "steps",
                     "output_message",
-                    "output_attachments",
                     "started_at"
                 ],
-                "title": "A single turn in an interaction with an Agentic System."
+                "description": "A single turn in an interaction with an Agentic System."
             },
             "ViolationLevel": {
                 "type": "string",
@@ -4346,7 +5300,7 @@
                 "required": [
                     "event"
                 ],
-                "title": "streamed agent turn completion response."
+                "description": "streamed agent turn completion response."
             },
             "AgentTurnResponseTurnCompletePayload": {
                 "type": "object",
@@ -4423,242 +5377,7 @@
                 "required": [
                     "embeddings"
                 ],
-                "title": "Response containing generated embeddings."
-            },
-            "AgentCandidate": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "const": "agent",
-                        "default": "agent"
-                    },
-                    "config": {
-                        "$ref": "#/components/schemas/AgentConfig"
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "type",
-                    "config"
-                ]
-            },
-            "AggregationFunctionType": {
-                "type": "string",
-                "enum": [
-                    "average",
-                    "median",
-                    "categorical_count",
-                    "accuracy"
-                ]
-            },
-            "AppEvalTaskConfig": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "const": "app",
-                        "default": "app"
-                    },
-                    "eval_candidate": {
-                        "$ref": "#/components/schemas/EvalCandidate"
-                    },
-                    "scoring_params": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "$ref": "#/components/schemas/ScoringFnParams"
-                        }
-                    },
-                    "num_examples": {
-                        "type": "integer"
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "type",
-                    "eval_candidate",
-                    "scoring_params"
-                ]
-            },
-            "BasicScoringFnParams": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "const": "basic",
-                        "default": "basic"
-                    },
-                    "aggregation_functions": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AggregationFunctionType"
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "type"
-                ]
-            },
-            "BenchmarkEvalTaskConfig": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "const": "benchmark",
-                        "default": "benchmark"
-                    },
-                    "eval_candidate": {
-                        "$ref": "#/components/schemas/EvalCandidate"
-                    },
-                    "num_examples": {
-                        "type": "integer"
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "type",
-                    "eval_candidate"
-                ]
-            },
-            "EvalCandidate": {
-                "oneOf": [
-                    {
-                        "$ref": "#/components/schemas/ModelCandidate"
-                    },
-                    {
-                        "$ref": "#/components/schemas/AgentCandidate"
-                    }
-                ],
-                "discriminator": {
-                    "propertyName": "type",
-                    "mapping": {
-                        "model": "#/components/schemas/ModelCandidate",
-                        "agent": "#/components/schemas/AgentCandidate"
-                    }
-                }
-            },
-            "EvalTaskConfig": {
-                "oneOf": [
-                    {
-                        "$ref": "#/components/schemas/BenchmarkEvalTaskConfig"
-                    },
-                    {
-                        "$ref": "#/components/schemas/AppEvalTaskConfig"
-                    }
-                ],
-                "discriminator": {
-                    "propertyName": "type",
-                    "mapping": {
-                        "benchmark": "#/components/schemas/BenchmarkEvalTaskConfig",
-                        "app": "#/components/schemas/AppEvalTaskConfig"
-                    }
-                }
-            },
-            "LLMAsJudgeScoringFnParams": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "const": "llm_as_judge",
-                        "default": "llm_as_judge"
-                    },
-                    "judge_model": {
-                        "type": "string"
-                    },
-                    "prompt_template": {
-                        "type": "string"
-                    },
-                    "judge_score_regexes": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "aggregation_functions": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AggregationFunctionType"
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "type",
-                    "judge_model"
-                ]
-            },
-            "ModelCandidate": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "const": "model",
-                        "default": "model"
-                    },
-                    "model": {
-                        "type": "string"
-                    },
-                    "sampling_params": {
-                        "$ref": "#/components/schemas/SamplingParams"
-                    },
-                    "system_message": {
-                        "$ref": "#/components/schemas/SystemMessage"
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "type",
-                    "model",
-                    "sampling_params"
-                ]
-            },
-            "RegexParserScoringFnParams": {
-                "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "const": "regex_parser",
-                        "default": "regex_parser"
-                    },
-                    "parsing_regexes": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "aggregation_functions": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/AggregationFunctionType"
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "type"
-                ]
-            },
-            "ScoringFnParams": {
-                "oneOf": [
-                    {
-                        "$ref": "#/components/schemas/LLMAsJudgeScoringFnParams"
-                    },
-                    {
-                        "$ref": "#/components/schemas/RegexParserScoringFnParams"
-                    },
-                    {
-                        "$ref": "#/components/schemas/BasicScoringFnParams"
-                    }
-                ],
-                "discriminator": {
-                    "propertyName": "type",
-                    "mapping": {
-                        "llm_as_judge": "#/components/schemas/LLMAsJudgeScoringFnParams",
-                        "regex_parser": "#/components/schemas/RegexParserScoringFnParams",
-                        "basic": "#/components/schemas/BasicScoringFnParams"
-                    }
-                }
+                "description": "Response containing generated embeddings."
             },
             "EvaluateRowsRequest": {
                 "type": "object",
@@ -4698,7 +5417,7 @@
                         }
                     },
                     "task_config": {
-                        "$ref": "#/components/schemas/EvalTaskConfig"
+                        "$ref": "#/components/schemas/BenchmarkConfig"
                     }
                 },
                 "additionalProperties": false,
@@ -4706,113 +5425,6 @@
                     "input_rows",
                     "scoring_functions",
                     "task_config"
-                ]
-            },
-            "EvaluateResponse": {
-                "type": "object",
-                "properties": {
-                    "generations": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "oneOf": [
-                                    {
-                                        "type": "null"
-                                    },
-                                    {
-                                        "type": "boolean"
-                                    },
-                                    {
-                                        "type": "number"
-                                    },
-                                    {
-                                        "type": "string"
-                                    },
-                                    {
-                                        "type": "array"
-                                    },
-                                    {
-                                        "type": "object"
-                                    }
-                                ]
-                            }
-                        }
-                    },
-                    "scores": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "$ref": "#/components/schemas/ScoringResult"
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "generations",
-                    "scores"
-                ]
-            },
-            "ScoringResult": {
-                "type": "object",
-                "properties": {
-                    "score_rows": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "oneOf": [
-                                    {
-                                        "type": "null"
-                                    },
-                                    {
-                                        "type": "boolean"
-                                    },
-                                    {
-                                        "type": "number"
-                                    },
-                                    {
-                                        "type": "string"
-                                    },
-                                    {
-                                        "type": "array"
-                                    },
-                                    {
-                                        "type": "object"
-                                    }
-                                ]
-                            }
-                        }
-                    },
-                    "aggregated_results": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "oneOf": [
-                                {
-                                    "type": "null"
-                                },
-                                {
-                                    "type": "boolean"
-                                },
-                                {
-                                    "type": "number"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "array"
-                                },
-                                {
-                                    "type": "object"
-                                }
-                            ]
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "score_rows",
-                    "aggregated_results"
                 ]
             },
             "Session": {
@@ -4842,7 +5454,7 @@
                     "turns",
                     "started_at"
                 ],
-                "title": "A single session of an interaction with an Agentic System."
+                "description": "A single session of an interaction with an Agentic System."
             },
             "AgentStepResponse": {
                 "type": "object",
@@ -5130,69 +5742,6 @@
                     "type"
                 ]
             },
-            "EvalTask": {
-                "type": "object",
-                "properties": {
-                    "identifier": {
-                        "type": "string"
-                    },
-                    "provider_resource_id": {
-                        "type": "string"
-                    },
-                    "provider_id": {
-                        "type": "string"
-                    },
-                    "type": {
-                        "type": "string",
-                        "const": "eval_task",
-                        "default": "eval_task"
-                    },
-                    "dataset_id": {
-                        "type": "string"
-                    },
-                    "scoring_functions": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "metadata": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "oneOf": [
-                                {
-                                    "type": "null"
-                                },
-                                {
-                                    "type": "boolean"
-                                },
-                                {
-                                    "type": "number"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "array"
-                                },
-                                {
-                                    "type": "object"
-                                }
-                            ]
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "identifier",
-                    "provider_resource_id",
-                    "provider_id",
-                    "type",
-                    "dataset_id",
-                    "scoring_functions",
-                    "metadata"
-                ]
-            },
             "Model": {
                 "type": "object",
                 "properties": {
@@ -5413,7 +5962,7 @@
                     "provider_id",
                     "type"
                 ],
-                "title": "A safety shield resource that can be used to check content"
+                "description": "A safety shield resource that can be used to check content"
             },
             "Span": {
                 "type": "object",
@@ -5732,16 +6281,7 @@
                     "job_uuid",
                     "checkpoints"
                 ],
-                "title": "Artifacts of a finetuning job."
-            },
-            "JobStatus": {
-                "type": "string",
-                "enum": [
-                    "completed",
-                    "in_progress",
-                    "failed",
-                    "scheduled"
-                ]
+                "description": "Artifacts of a finetuning job."
             },
             "PostTrainingJobStatusResponse": {
                 "type": "object",
@@ -5802,7 +6342,7 @@
                     "status",
                     "checkpoints"
                 ],
-                "title": "Status of a finetuning job."
+                "description": "Status of a finetuning job."
             },
             "ListPostTrainingJobsResponse": {
                 "type": "object",
@@ -6086,21 +6626,6 @@
                     "data"
                 ]
             },
-            "ListEvalTasksResponse": {
-                "type": "object",
-                "properties": {
-                    "data": {
-                        "type": "array",
-                        "items": {
-                            "$ref": "#/components/schemas/EvalTask"
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "data"
-                ]
-            },
             "ListModelsResponse": {
                 "type": "object",
                 "properties": {
@@ -6296,77 +6821,6 @@
                     "critical"
                 ]
             },
-            "MetricEvent": {
-                "type": "object",
-                "properties": {
-                    "trace_id": {
-                        "type": "string"
-                    },
-                    "span_id": {
-                        "type": "string"
-                    },
-                    "timestamp": {
-                        "type": "string",
-                        "format": "date-time"
-                    },
-                    "attributes": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "oneOf": [
-                                {
-                                    "type": "null"
-                                },
-                                {
-                                    "type": "boolean"
-                                },
-                                {
-                                    "type": "number"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "array"
-                                },
-                                {
-                                    "type": "object"
-                                }
-                            ]
-                        }
-                    },
-                    "type": {
-                        "type": "string",
-                        "const": "metric",
-                        "default": "metric"
-                    },
-                    "metric": {
-                        "type": "string"
-                    },
-                    "value": {
-                        "oneOf": [
-                            {
-                                "type": "integer"
-                            },
-                            {
-                                "type": "number"
-                            }
-                        ]
-                    },
-                    "unit": {
-                        "type": "string"
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "trace_id",
-                    "span_id",
-                    "timestamp",
-                    "type",
-                    "metric",
-                    "value",
-                    "unit"
-                ]
-            },
             "SpanEndPayload": {
                 "type": "object",
                 "properties": {
@@ -6424,22 +6878,19 @@
                         "additionalProperties": {
                             "oneOf": [
                                 {
-                                    "type": "null"
+                                    "type": "string"
                                 },
                                 {
-                                    "type": "boolean"
+                                    "type": "integer"
                                 },
                                 {
                                     "type": "number"
                                 },
                                 {
-                                    "type": "string"
+                                    "type": "boolean"
                                 },
                                 {
-                                    "type": "array"
-                                },
-                                {
-                                    "type": "object"
+                                    "type": "null"
                                 }
                             ]
                         }
@@ -6497,22 +6948,19 @@
                         "additionalProperties": {
                             "oneOf": [
                                 {
-                                    "type": "null"
+                                    "type": "string"
                                 },
                                 {
-                                    "type": "boolean"
+                                    "type": "integer"
                                 },
                                 {
                                     "type": "number"
                                 },
                                 {
-                                    "type": "string"
+                                    "type": "boolean"
                                 },
                                 {
-                                    "type": "array"
-                                },
-                                {
-                                    "type": "object"
+                                    "type": "null"
                                 }
                             ]
                         }
@@ -7089,6 +7537,60 @@
                     "data"
                 ]
             },
+            "RegisterBenchmarkRequest": {
+                "type": "object",
+                "properties": {
+                    "benchmark_id": {
+                        "type": "string"
+                    },
+                    "dataset_id": {
+                        "type": "string"
+                    },
+                    "scoring_functions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "provider_benchmark_id": {
+                        "type": "string"
+                    },
+                    "provider_id": {
+                        "type": "string"
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "oneOf": [
+                                {
+                                    "type": "null"
+                                },
+                                {
+                                    "type": "boolean"
+                                },
+                                {
+                                    "type": "number"
+                                },
+                                {
+                                    "type": "string"
+                                },
+                                {
+                                    "type": "array"
+                                },
+                                {
+                                    "type": "object"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "additionalProperties": false,
+                "required": [
+                    "benchmark_id",
+                    "dataset_id",
+                    "scoring_functions"
+                ]
+            },
             "RegisterDatasetRequest": {
                 "type": "object",
                 "properties": {
@@ -7141,60 +7643,6 @@
                     "dataset_id",
                     "dataset_schema",
                     "url"
-                ]
-            },
-            "RegisterEvalTaskRequest": {
-                "type": "object",
-                "properties": {
-                    "eval_task_id": {
-                        "type": "string"
-                    },
-                    "dataset_id": {
-                        "type": "string"
-                    },
-                    "scoring_functions": {
-                        "type": "array",
-                        "items": {
-                            "type": "string"
-                        }
-                    },
-                    "provider_eval_task_id": {
-                        "type": "string"
-                    },
-                    "provider_id": {
-                        "type": "string"
-                    },
-                    "metadata": {
-                        "type": "object",
-                        "additionalProperties": {
-                            "oneOf": [
-                                {
-                                    "type": "null"
-                                },
-                                {
-                                    "type": "boolean"
-                                },
-                                {
-                                    "type": "number"
-                                },
-                                {
-                                    "type": "string"
-                                },
-                                {
-                                    "type": "array"
-                                },
-                                {
-                                    "type": "object"
-                                }
-                            ]
-                        }
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "eval_task_id",
-                    "dataset_id",
-                    "scoring_functions"
                 ]
             },
             "RegisterModelRequest": {
@@ -7388,24 +7836,12 @@
                 "type": "object",
                 "properties": {
                     "task_config": {
-                        "$ref": "#/components/schemas/EvalTaskConfig"
+                        "$ref": "#/components/schemas/BenchmarkConfig"
                     }
                 },
                 "additionalProperties": false,
                 "required": [
                     "task_config"
-                ]
-            },
-            "Job": {
-                "type": "object",
-                "properties": {
-                    "job_id": {
-                        "type": "string"
-                    }
-                },
-                "additionalProperties": false,
-                "required": [
-                    "job_id"
                 ]
             },
             "RunShieldRequest": {
@@ -7786,7 +8222,7 @@
                             "top_k_top_p",
                             "sigmoid"
                         ],
-                        "title": "The type of filtering function."
+                        "description": "The type of filtering function."
                     },
                     "model": {
                         "type": "string"
@@ -7859,7 +8295,7 @@
                 "required": [
                     "synthetic_data"
                 ],
-                "title": "Response from the synthetic data generation. Batch of (prompt, response, score) tuples that pass the threshold."
+                "description": "Response from the synthetic data generation. Batch of (prompt, response, score) tuples that pass the threshold."
             },
             "VersionInfo": {
                 "type": "object",
@@ -7891,6 +8327,9 @@
             "name": "BatchInference (Coming Soon)"
         },
         {
+            "name": "Benchmarks"
+        },
+        {
             "name": "DatasetIO"
         },
         {
@@ -7898,9 +8337,6 @@
         },
         {
             "name": "Eval"
-        },
-        {
-            "name": "EvalTasks"
         },
         {
             "name": "Inference",
@@ -7953,10 +8389,10 @@
             "tags": [
                 "Agents",
                 "BatchInference (Coming Soon)",
+                "Benchmarks",
                 "DatasetIO",
                 "Datasets",
                 "Eval",
-                "EvalTasks",
                 "Inference",
                 "Inspect",
                 "Models",
@@ -7975,25 +8411,14 @@
         }
     ]
 };
-            options = {
-                downloadFileName: "openapi.json",
-                expandResponses: "200",
-                expandSingleSchemaField: true,
-                jsonSampleExpandLevel: "all",
-                schemaExpansionLevel: "all",
-            };
-            element = document.getElementById("openapi-container");
-            Redoc.init(spec, options, element);
+            const element = document.getElementById("openapi-container");
+            element.apiDescriptionDocument = spec;
 
             if (spec.info && spec.info.title) {
                 document.title = spec.info.title;
             }
         });
     </script>
-</head>
-
-<body>
-    <div id="openapi-container"></div>
 </body>
 
 </html>

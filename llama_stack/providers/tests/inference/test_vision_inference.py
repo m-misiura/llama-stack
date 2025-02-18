@@ -4,12 +4,12 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 
+import base64
 from pathlib import Path
 
 import pytest
 
-from llama_stack.apis.common.content_types import ImageContentItem, TextContentItem, URL
-
+from llama_stack.apis.common.content_types import URL, ImageContentItem, TextContentItem
 from llama_stack.apis.inference import (
     ChatCompletionResponse,
     ChatCompletionResponseEventType,
@@ -23,7 +23,7 @@ from .utils import group_chunks
 THIS_DIR = Path(__file__).parent
 
 with open(THIS_DIR / "pasta.jpeg", "rb") as f:
-    PASTA_IMAGE = f.read()
+    PASTA_IMAGE = base64.b64encode(f.read()).decode("utf-8")
 
 
 class TestVisionModelInference:
@@ -39,7 +39,7 @@ class TestVisionModelInference:
                 ImageContentItem(
                     image=dict(
                         url=URL(
-                            uri="https://www.healthypawspetinsurance.com/Images/V3/DogAndPuppyInsurance/Dog_CTA_Desktop_HeroImage.jpg"
+                            uri="https://raw.githubusercontent.com/meta-llama/llama-stack/main/tests/client-sdk/inference/dog.png"
                         )
                     )
                 ),
@@ -80,7 +80,7 @@ class TestVisionModelInference:
             ImageContentItem(
                 image=dict(
                     url=URL(
-                        uri="https://www.healthypawspetinsurance.com/Images/V3/DogAndPuppyInsurance/Dog_CTA_Desktop_HeroImage.jpg"
+                        uri="https://raw.githubusercontent.com/meta-llama/llama-stack/main/tests/client-sdk/inference/dog.png"
                     )
                 )
             ),
@@ -88,7 +88,7 @@ class TestVisionModelInference:
         expected_strings_to_check = [
             ["puppy"],
         ]
-        for image, expected_strings in zip(images, expected_strings_to_check):
+        for image, expected_strings in zip(images, expected_strings_to_check, strict=False):
             response = [
                 r
                 async for r in await inference_impl.chat_completion(

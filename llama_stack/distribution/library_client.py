@@ -13,17 +13,17 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from pathlib import Path
-from typing import Any, get_args, get_origin, Optional, TypeVar
+from typing import Any, Optional, TypeVar, get_args, get_origin
 
 import httpx
 import yaml
 from llama_stack_client import (
+    NOT_GIVEN,
     APIResponse,
     AsyncAPIResponse,
     AsyncLlamaStackClient,
     AsyncStream,
     LlamaStackClient,
-    NOT_GIVEN,
 )
 from pydantic import BaseModel, TypeAdapter
 from rich.console import Console
@@ -196,8 +196,9 @@ class AsyncLlamaStackAsLibraryClient(AsyncLlamaStackClient):
         self.custom_provider_registry = custom_provider_registry
         self.provider_data = provider_data
 
-    async def initialize(self):
+    async def initialize(self) -> bool:
         try:
+            self.endpoint_impls = None
             self.impls = await construct_stack(self.config, self.custom_provider_registry)
         except ModuleNotFoundError as _e:
             cprint(_e.msg, "red")
@@ -213,7 +214,7 @@ class AsyncLlamaStackAsLibraryClient(AsyncLlamaStackClient):
                     f"Please run:\n\n{prefix}llama stack build --template {self.config_path_or_template_name} --image-type venv\n\n",
                     "yellow",
                 )
-            return False
+            raise _e
 
         if Api.telemetry in self.impls:
             setup_logger(self.impls[Api.telemetry])
@@ -230,7 +231,13 @@ class AsyncLlamaStackAsLibraryClient(AsyncLlamaStackClient):
 
         def _convert_path_to_regex(path: str) -> str:
             # Convert {param} to named capture groups
-            pattern = re.sub(r"{(\w+)}", r"(?P<\1>[^/]+)", path)
+            # handle {param:path} as well which allows for forward slashes in the param value
+            pattern = re.sub(
+                r"{(\w+)(?::path)?}",
+                lambda m: f"(?P<{m.group(1)}>{'[^/]+' if not m.group(0).endswith(':path') else '.+'})",
+                path,
+            )
+
             return f"^{pattern}$"
 
         for api, api_endpoints in endpoints.items():

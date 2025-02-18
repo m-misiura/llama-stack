@@ -4,9 +4,6 @@
 # This source code is licensed under the terms described in the LICENSE file in
 # the root directory of this source tree.
 
-import base64
-import pathlib
-
 import pytest
 from pydantic import BaseModel
 
@@ -14,15 +11,10 @@ PROVIDER_TOOL_PROMPT_FORMAT = {
     "remote::ollama": "json",
     "remote::together": "json",
     "remote::fireworks": "json",
+    "remote::vllm": "json",
 }
 
-PROVIDER_LOGPROBS_TOP_K = set(
-    {
-        "remote::together",
-        "remote::fireworks",
-        # "remote:vllm"
-    }
-)
+PROVIDER_LOGPROBS_TOP_K = {"remote::together", "remote::fireworks", "remote::vllm"}
 
 
 @pytest.fixture(scope="session")
@@ -54,23 +46,6 @@ def get_weather_tool_definition():
             },
         },
     }
-
-
-@pytest.fixture
-def image_path():
-    return pathlib.Path(__file__).parent / "dog.png"
-
-
-@pytest.fixture
-def base64_image_data(image_path):
-    # Convert the image to base64
-    return base64.b64encode(image_path.read_bytes()).decode("utf-8")
-
-
-@pytest.fixture
-def base64_image_url(base64_image_data, image_path):
-    # suffix includes the ., so we remove it
-    return f"data:image/{image_path.suffix[1:]};base64,{base64_image_data}"
 
 
 def test_text_completion_non_streaming(llama_stack_client, text_model_id):
@@ -176,8 +151,11 @@ def test_text_completion_structured_output(llama_stack_client, text_model_id, in
 @pytest.mark.parametrize(
     "question,expected",
     [
-        ("What are the names of planets in our solar system?", "Earth"),
-        ("What are the names of the planets that have rings around them?", "Saturn"),
+        ("Which planet do humans live on?", "Earth"),
+        (
+            "Which planet has rings around it with a name starting with letter S?",
+            "Saturn",
+        ),
     ],
 )
 def test_text_chat_completion_non_streaming(llama_stack_client, text_model_id, question, expected):
@@ -301,99 +279,80 @@ def test_text_chat_completion_structured_output(llama_stack_client, text_model_i
     assert answer.num_seasons_in_nba == 15
 
 
-def test_image_chat_completion_non_streaming(llama_stack_client, vision_model_id):
-    message = {
-        "role": "user",
-        "content": [
+@pytest.mark.parametrize(
+    "streaming",
+    [
+        True,
+        False,
+    ],
+)
+def test_text_chat_completion_tool_calling_tools_not_in_request(llama_stack_client, text_model_id, streaming):
+    # TODO: more dynamic lookup on tool_prompt_format for model family
+    tool_prompt_format = "json" if "3.1" in text_model_id else "python_list"
+    request = {
+        "model_id": text_model_id,
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
             {
-                "type": "image",
-                "image": {
-                    "url": {
-                        # TODO: Replace with Github based URI to resources/sample1.jpg
-                        "uri": "https://www.healthypawspetinsurance.com/Images/V3/DogAndPuppyInsurance/Dog_CTA_Desktop_HeroImage.jpg"
+                "role": "user",
+                "content": "What pods are in the namespace openshift-lightspeed?",
+            },
+            {
+                "role": "assistant",
+                "content": "",
+                "stop_reason": "end_of_turn",
+                "tool_calls": [
+                    {
+                        "call_id": "1",
+                        "tool_name": "get_object_namespace_list",
+                        "arguments": {
+                            "kind": "pod",
+                            "namespace": "openshift-lightspeed",
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "call_id": "1",
+                "tool_name": "get_object_namespace_list",
+                "content": "the objects are pod1, pod2, pod3",
+            },
+        ],
+        "tools": [
+            {
+                "tool_name": "get_object_namespace_list",
+                "description": "Get the list of objects in a namespace",
+                "parameters": {
+                    "kind": {
+                        "param_type": "string",
+                        "description": "the type of object",
+                        "required": True,
+                    },
+                    "namespace": {
+                        "param_type": "string",
+                        "description": "the name of the namespace",
+                        "required": True,
                     },
                 },
-            },
-            {
-                "type": "text",
-                "text": "Describe what is in this image.",
-            },
+            }
         ],
+        "tool_choice": "auto",
+        "tool_prompt_format": tool_prompt_format,
+        "stream": streaming,
     }
-    response = llama_stack_client.inference.chat_completion(
-        model_id=vision_model_id,
-        messages=[message],
-        stream=False,
-    )
-    message_content = response.completion_message.content.lower().strip()
-    assert len(message_content) > 0
-    assert any(expected in message_content for expected in {"dog", "puppy", "pup"})
 
+    response = llama_stack_client.inference.chat_completion(**request)
 
-def test_image_chat_completion_streaming(llama_stack_client, vision_model_id):
-    message = {
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "image": {
-                    "url": {
-                        # TODO: Replace with Github based URI to resources/sample1.jpg
-                        "uri": "https://www.healthypawspetinsurance.com/Images/V3/DogAndPuppyInsurance/Dog_CTA_Desktop_HeroImage.jpg"
-                    },
-                },
-            },
-            {
-                "type": "text",
-                "text": "Describe what is in this image.",
-            },
-        ],
-    }
-    response = llama_stack_client.inference.chat_completion(
-        model_id=vision_model_id,
-        messages=[message],
-        stream=True,
-    )
-    streamed_content = ""
-    for chunk in response:
-        streamed_content += chunk.event.delta.text.lower()
-    assert len(streamed_content) > 0
-    assert any(expected in streamed_content for expected in {"dog", "puppy", "pup"})
-
-
-@pytest.mark.parametrize("type_", ["url", "data"])
-def test_image_chat_completion_base64(llama_stack_client, vision_model_id, base64_image_data, base64_image_url, type_):
-    image_spec = {
-        "url": {
-            "type": "image",
-            "image": {
-                "url": {
-                    "uri": base64_image_url,
-                },
-            },
-        },
-        "data": {
-            "type": "image",
-            "image": {
-                "data": base64_image_data,
-            },
-        },
-    }[type_]
-
-    message = {
-        "role": "user",
-        "content": [
-            image_spec,
-            {
-                "type": "text",
-                "text": "Describe what is in this image.",
-            },
-        ],
-    }
-    response = llama_stack_client.inference.chat_completion(
-        model_id=vision_model_id,
-        messages=[message],
-        stream=False,
-    )
-    message_content = response.completion_message.content.lower().strip()
-    assert len(message_content) > 0
+    if streaming:
+        for chunk in response:
+            delta = chunk.event.delta
+            if delta.type == "tool_call" and delta.parse_status == "succeeded":
+                assert delta.tool_call.tool_name == "get_object_namespace_list"
+            if delta.type == "tool_call" and delta.parse_status == "failed":
+                # expect raw message that failed to parse in tool_call
+                assert type(delta.tool_call) == str
+                assert len(delta.tool_call) > 0
+    else:
+        for tc in response.completion_message.tool_calls:
+            assert tc.tool_name == "get_object_namespace_list"

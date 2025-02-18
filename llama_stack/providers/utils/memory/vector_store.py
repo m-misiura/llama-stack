@@ -15,16 +15,14 @@ from urllib.parse import unquote
 import chardet
 import httpx
 import numpy as np
-
 from llama_models.llama3.api.tokenizer import Tokenizer
 from numpy.typing import NDArray
-
 from pypdf import PdfReader
 
 from llama_stack.apis.common.content_types import (
+    URL,
     InterleavedContent,
     TextContentItem,
-    URL,
 )
 from llama_stack.apis.tools import RAGDocument
 from llama_stack.apis.vector_dbs import VectorDB
