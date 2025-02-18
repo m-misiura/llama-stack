@@ -2,7 +2,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict, Any, Union, Set
 from urllib.parse import urlparse  # Added for URL validation
-from llama_models.schema_utils import json_schema_type
+from llama_stack.schema_utils import json_schema_type
 
 
 # Added MessageType enum for better type safety
