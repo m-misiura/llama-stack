@@ -1,9 +1,13 @@
 import logging
 from typing import Dict, List, Any, Optional
-from llama_stack.apis.inference import Message, SystemMessage, UserMessage
+from llama_stack.apis.inference import Message
 from llama_stack.apis.safety import RunShieldResponse
-from .base_detector import BaseDetector
-from .config import ContentDetectorConfig, EndpointType
+from llama_stack.providers.remote.safety.fms.detectors.base import (
+    BaseDetector,
+)
+from llama_stack.providers.remote.safety.fms.config import (
+    ContentDetectorConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,13 +84,13 @@ class ContentDetector(BaseDetector):
             logger.error(f"API call failed: {str(e)}", exc_info=True)
             raise
 
-    async def run_shield(
+    async def _run_shield_impl(
         self,
         shield_id: str,
         messages: List[Message],
         params: Optional[Dict[str, Any]] = None,
     ) -> RunShieldResponse:
-        """Execute shield checks"""
+        """Implementation of shield checks for content messages"""
         try:
             shield = await self.shield_store.get_shield(shield_id)
             self._validate_shield(shield)
@@ -101,9 +105,7 @@ class ContentDetector(BaseDetector):
                 detections = await self._call_detector_api(content, params)
 
                 for detection in detections:
-                    processed = self._process_detection(
-                        detection
-                    )  # Changed from _process_detection_result
+                    processed = self._process_detection(detection)
                     if processed:
                         logger.info(f"Violation detected: {processed}")
                         return self.create_violation_response(

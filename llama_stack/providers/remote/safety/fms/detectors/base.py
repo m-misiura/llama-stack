@@ -2,7 +2,13 @@ import logging
 from typing import Dict, List, Any, Optional
 import httpx
 from abc import ABC, abstractmethod
-from llama_stack.apis.inference import Message
+from llama_stack.apis.inference import (
+    Message,
+    UserMessage,
+    SystemMessage,
+    ToolResponseMessage,
+    CompletionMessage,
+)
 from llama_stack.apis.safety import (
     Safety,
     RunShieldResponse,
@@ -11,7 +17,11 @@ from llama_stack.apis.safety import (
 )
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
-from .config import BaseDetectorConfig, DetectorParams, EndpointType
+from llama_stack.providers.remote.safety.fms.config import (
+    BaseDetectorConfig,
+    DetectorParams,
+    EndpointType,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +46,24 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         """Register a shield with the detector"""
         logger.info(f"Registering shield {shield.identifier}")
         self.registered_shields.append(shield)
+
+    def _should_process_message(self, message: Message) -> bool:
+        """Check if this detector should process the given message type"""
+        message_type_map = {
+            "user": lambda m: isinstance(m, UserMessage),
+            "system": lambda m: isinstance(m, SystemMessage),
+            "tool": lambda m: isinstance(m, ToolResponseMessage),
+            "completion": lambda m: isinstance(m, CompletionMessage),
+        }
+
+        for message_type in self.config.message_types:
+            if message_type_map.get(message_type, lambda _: False)(message):
+                return True
+        return False
+
+    def _filter_messages(self, messages: List[Message]) -> List[Message]:
+        """Filter messages based on configured message types"""
+        return [msg for msg in messages if self._should_process_message(msg)]
 
     def _construct_url(self) -> str:
         """Construct API URL based on configuration"""
@@ -216,6 +244,15 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
             raise ValueError("Shield missing identifier")
 
     @abstractmethod
+    async def _run_shield_impl(
+        self,
+        shield_id: str,
+        messages: List[Message],
+        params: Optional[Dict[str, Any]] = None,
+    ) -> RunShieldResponse:
+        """Implementation specific shield running logic"""
+        pass
+
     async def run_shield(
         self,
         shield_id: str,
@@ -223,13 +260,17 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         params: Optional[Dict[str, Any]] = None,
     ) -> RunShieldResponse:
         """Run safety checks using configured shield"""
-        pass
+        # Filter messages based on configured message types
+        filtered_messages = self._filter_messages(messages)
 
+        if not filtered_messages:
+            logger.debug(
+                f"No messages of configured types {self.config.message_types} to process"
+            )
+            return RunShieldResponse(violation=None)
 
-from typing import Dict, List, Optional
-from llama_stack.apis.inference import Message
-from llama_stack.apis.safety import RunShieldResponse
-from .base_detector import BaseDetector
+        # Continue with shield processing using filtered messages
+        return await self._run_shield_impl(shield_id, filtered_messages, params)
 
 
 class DetectorProvider:
@@ -242,12 +283,10 @@ class DetectorProvider:
         self, shield_id: str, messages: List[Message]
     ) -> Dict[str, RunShieldResponse]:
         """Run all detectors and return results from each"""
-
         results = {}
         for name, detector in self.detectors.items():
             response = await detector.run_shield(shield_id, messages)
             results[name] = response
-
         return results
 
     async def shutdown(self):

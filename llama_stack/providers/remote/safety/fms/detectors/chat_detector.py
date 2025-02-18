@@ -2,8 +2,12 @@ import logging
 from typing import Dict, List, Any, Optional
 from llama_stack.apis.inference import Message
 from llama_stack.apis.safety import RunShieldResponse, SafetyViolation, ViolationLevel
-from .base_detector import BaseDetector
-from .config import ChatDetectorConfig, EndpointType
+from llama_stack.providers.remote.safety.fms.detectors.base import (
+    BaseDetector,
+)
+from llama_stack.providers.remote.safety.fms.config import (
+    ChatDetectorConfig,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,13 +120,13 @@ class ChatDetector(BaseDetector):
             return result
         return None
 
-    async def run_shield(
+    async def _run_shield_impl(
         self,
         shield_id: str,
         messages: List[Message],
         params: Optional[Dict[str, Any]] = None,
     ) -> RunShieldResponse:
-        """Execute shield checks"""
+        """Implementation of shield checks for chat messages"""
         try:
             shield = await self.shield_store.get_shield(shield_id)
             self._validate_shield(shield)

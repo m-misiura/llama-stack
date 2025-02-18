@@ -1,14 +1,21 @@
 from typing import Any, Union, Dict, List
-from .config import (
+from llama_stack.providers.remote.safety.fms.config import (
     ContentDetectorConfig,
     ChatDetectorConfig,
     FMSSafetyProviderConfig,
     EndpointType,
     DetectorParams,
 )
-from .chat_detector import ChatDetector
-from .content_detector import ContentDetector
-from .base_detector import BaseDetector, DetectorProvider
+from llama_stack.providers.remote.safety.fms.detectors.chat_detector import (
+    ChatDetector,
+)
+from llama_stack.providers.remote.safety.fms.detectors.content_detector import (
+    ContentDetector,
+)
+from llama_stack.providers.remote.safety.fms.detectors.base import (
+    BaseDetector,
+    DetectorProvider,
+)
 
 
 async def get_adapter_impl(
@@ -20,22 +27,20 @@ async def get_adapter_impl(
     # Handle provider config with multiple detectors
     if isinstance(config, FMSSafetyProviderConfig):
         detectors = {}
+        # Process all detectors from the config
         for detector_id, detector_config in config.detectors.items():
             if isinstance(detector_config, (ChatDetectorConfig, ContentDetectorConfig)):
-                # Validate detector config after settings are propagated
-                detector_config.validate()
+                # Config validation now happens in __post_init__
                 impl = await get_adapter_impl(detector_config)
                 detectors[detector_id] = impl
             else:
                 raise ValueError(f"Invalid detector config type for {detector_id}")
         return DetectorProvider(detectors)
 
-    # Handle single detector config
+    # Handle single detector config (unchanged)
     if isinstance(config, ChatDetectorConfig):
-        config.validate()  # Validate before creating implementation
         impl = ChatDetector(config)
     elif isinstance(config, ContentDetectorConfig):
-        config.validate()  # Validate before creating implementation
         impl = ContentDetector(config)
     else:
         raise ValueError(f"Unsupported config type: {type(config)}")
@@ -45,13 +50,14 @@ async def get_adapter_impl(
 
 
 __all__ = [
-    "get_adapter_impl",
-    "ContentDetectorConfig",
+    "get_adapter_impl",  # Main factory function
+    "ContentDetectorConfig",  # Base configs for detectors
     "ChatDetectorConfig",
-    "FMSSafetyProviderConfig",
-    "EndpointType",
-    "DetectorParams",
-    "ChatDetector",
+    "FMSSafetyProviderConfig",  # Main provider config
+    "EndpointType",  # Endpoint type enum
+    "DetectorParams",  # Parameters for detectors
+    "ChatDetector",  # Detector implementations
     "ContentDetector",
-    "BaseDetector",
+    "BaseDetector",  # Base classes
+    "DetectorProvider",  # Added this as it's used in the return type
 ]
