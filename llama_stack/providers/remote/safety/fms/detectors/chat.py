@@ -1,18 +1,19 @@
 from __future__ import annotations
+
 import logging
-from typing import Dict, List, Any, Optional, TypeVar, Type
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 from llama_stack.apis.inference import Message
-from llama_stack.apis.safety import RunShieldResponse, SafetyViolation, ViolationLevel
+from llama_stack.apis.safety import RunShieldResponse
+from llama_stack.providers.remote.safety.fms.config import ChatDetectorConfig
 from llama_stack.providers.remote.safety.fms.detectors.base import (
     BaseDetector,
+    DetectionResult,
     DetectorError,
     DetectorRequestError,
     DetectorValidationError,
-    DetectionResult,
 )
-from llama_stack.providers.remote.safety.fms.config import ChatDetectorConfig
 
 # Type aliases for better readability
 ChatMessage = Dict[str, str]

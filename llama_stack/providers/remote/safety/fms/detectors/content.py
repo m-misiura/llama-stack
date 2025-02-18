@@ -1,19 +1,20 @@
 from __future__ import annotations
+
 import logging
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 from llama_stack.apis.inference import Message
 from llama_stack.apis.safety import RunShieldResponse
+from llama_stack.providers.remote.safety.fms.config import (
+    ContentDetectorConfig,
+)
 from llama_stack.providers.remote.safety.fms.detectors.base import (
     BaseDetector,
+    DetectionResult,
     DetectorError,
     DetectorRequestError,
     DetectorValidationError,
-    DetectionResult,
-)
-from llama_stack.providers.remote.safety.fms.config import (
-    ContentDetectorConfig,
 )
 
 # Type aliases for better readability

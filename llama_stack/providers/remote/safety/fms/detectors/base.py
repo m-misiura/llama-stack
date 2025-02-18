@@ -1,22 +1,24 @@
 from __future__ import annotations
+
 import logging
-from typing import Dict, List, Any, Optional, TypeVar, Type, ClassVar, Union
-from dataclasses import dataclass
-import httpx
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum, auto
+from typing import Any, ClassVar, Dict, List, Optional
 from urllib.parse import urlparse
 
+import httpx
+
 from llama_stack.apis.inference import (
+    CompletionMessage,
     Message,
-    UserMessage,
     SystemMessage,
     ToolResponseMessage,
-    CompletionMessage,
+    UserMessage,
 )
 from llama_stack.apis.safety import (
-    Safety,
     RunShieldResponse,
+    Safety,
     SafetyViolation,
     ViolationLevel,
 )
@@ -24,7 +26,6 @@ from llama_stack.apis.shields import Shield
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
 from llama_stack.providers.remote.safety.fms.config import (
     BaseDetectorConfig,
-    DetectorParams,
     EndpointType,
 )
 
