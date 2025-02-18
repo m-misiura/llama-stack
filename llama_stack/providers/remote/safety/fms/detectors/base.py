@@ -299,7 +299,7 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
                 if attempt == self.MAX_RETRIES - 1:
                     raise DetectorRequestError(
                         f"API Error after {self.MAX_RETRIES} attempts: {e.response.text}"
-                    )
+                    ) from e
 
             except httpx.RequestError as e:
                 logger.error(
@@ -308,7 +308,7 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
                 if attempt == self.MAX_RETRIES - 1:
                     raise DetectorRequestError(
                         f"Request Error after {self.MAX_RETRIES} attempts: {str(e)}"
-                    )
+                    ) from e
 
             # Exponential backoff
             await asyncio.sleep(self.BACKOFF_FACTOR**attempt)
