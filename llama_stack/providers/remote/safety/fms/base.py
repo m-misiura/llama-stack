@@ -11,7 +11,7 @@ from llama_stack.apis.safety import (
 )
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
-from .config import BaseDetectorConfig
+from .config import BaseDetectorConfig, DetectorParams, EndpointType
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
     def __init__(self, config: BaseDetectorConfig) -> None:
         self.config = config
         self.registered_shields = []
-        self.score_threshold = 0.5
+        self.score_threshold = config.confidence_threshold
 
     async def initialize(self) -> None:
         """Initialize detector resources"""
@@ -37,18 +37,100 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         logger.info(f"Registering shield {shield.identifier}")
         self.registered_shields.append(shield)
 
+    def _construct_url(self) -> str:
+        """Construct API URL based on configuration"""
+        if self.config.use_orchestrator_api:
+            if not self.config.orchestrator_base_url:
+                raise ValueError(
+                    "orchestrator_base_url is required when use_orchestrator_api is True"
+                )
+            base_url = self.config.orchestrator_base_url
+            endpoint_info = (
+                EndpointType.ORCHESTRATOR_CHAT.value
+                if self.config.is_chat
+                else EndpointType.ORCHESTRATOR_CONTENT.value
+            )
+            endpoint = endpoint_info["path"]
+        else:
+            if not self.config.base_url:
+                raise ValueError(
+                    "base_url is required when use_orchestrator_api is False"
+                )
+            base_url = self.config.base_url
+            endpoint_info = (
+                EndpointType.DIRECT_CHAT.value
+                if self.config.is_chat
+                else EndpointType.DIRECT_CONTENT.value
+            )
+            endpoint = endpoint_info["path"]
+
+        url = f"{base_url.rstrip('/')}{endpoint}"
+        logger.debug(
+            f"Constructed URL: {url} for {'chat' if self.config.is_chat else 'content'} endpoint"
+        )
+        return url
+
+    def _prepare_headers(self) -> Dict[str, str]:
+        """Prepare request headers based on configuration"""
+        headers = {
+            "accept": "application/json",
+            "Content-Type": "application/json",
+        }
+
+        if not self.config.use_orchestrator_api and self.config.detector_id:
+            headers["detector-id"] = self.config.detector_id
+
+        return headers
+
+    def _prepare_request_payload(
+        self, messages: List[Message], params: Optional[Dict[str, Any]] = None
+    ) -> Dict:
+        """Prepare request payload based on endpoint type and orchestrator mode"""
+        detector_params = {}
+        if self.config.detector_params:
+            detector_params = {
+                k: v
+                for k, v in vars(self.config.detector_params).items()
+                if v is not None
+            }
+
+        if self.config.use_orchestrator_api:
+            payload = {"detectors": {self.config.detector_id: detector_params}}
+            if self.config.is_chat:
+                payload["messages"] = [msg.dict() for msg in messages]
+            else:
+                payload["content"] = messages[0].content
+        else:
+            if self.config.is_chat:
+                payload = {
+                    "messages": [msg.dict() for msg in messages],
+                    "detector_params": (
+                        detector_params if detector_params else params or {}
+                    ),
+                }
+            else:
+                payload = {
+                    "contents": [msg.content for msg in messages],
+                    "detector_params": (
+                        detector_params if detector_params else params or {}
+                    ),
+                }
+
+        logger.debug(
+            f"Prepared payload for {'chat' if self.config.is_chat else 'content'} endpoint: {payload}"
+        )
+        return payload
+
     async def _make_request(
         self,
-        url: str,
         request: Dict,
         headers: Optional[Dict] = None,
         timeout: Optional[float] = None,
     ) -> Dict:
         """Make HTTP request with error handling"""
-        default_headers = {
-            "accept": "application/json",
-            "Content-Type": "application/json",
-        }
+        url = self._construct_url()
+        default_headers = self._prepare_headers()
+
         if headers:
             default_headers.update(headers)
 
@@ -77,7 +159,7 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
                 "detection": "Yes",
                 "detection_type": detection["detection_type"],
                 "score": detection["score"],
-                "detector_id": detection.get("detector_id"),
+                "detector_id": detection.get("detector_id", self.config.detector_id),
                 "text": detection.get("text", ""),
                 "start": detection.get("start", 0),
                 "end": detection.get("end", 0),
@@ -142,3 +224,33 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
     ) -> RunShieldResponse:
         """Run safety checks using configured shield"""
         pass
+
+
+from typing import Dict, List, Optional
+from llama_stack.apis.inference import Message
+from llama_stack.apis.safety import RunShieldResponse
+from .base_detector import BaseDetector
+
+
+class DetectorProvider:
+    """Provider that manages multiple detectors and allows running them all at once"""
+
+    def __init__(self, detectors: Dict[str, BaseDetector]):
+        self.detectors = detectors
+
+    async def run_shield(
+        self, shield_id: str, messages: List[Message]
+    ) -> Dict[str, RunShieldResponse]:
+        """Run all detectors and return results from each"""
+
+        results = {}
+        for name, detector in self.detectors.items():
+            response = await detector.run_shield(shield_id, messages)
+            results[name] = response
+
+        return results
+
+    async def shutdown(self):
+        """Shutdown all detectors"""
+        for detector in self.detectors.values():
+            await detector.shutdown()
