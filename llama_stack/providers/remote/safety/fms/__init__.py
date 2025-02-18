@@ -1,4 +1,5 @@
-from typing import Any, Union, Dict, List
+from typing import Any, Dict, List, Union, TypeVar, Type
+from types import TracebackType
 from llama_stack.providers.remote.safety.fms.config import (
     ContentDetectorConfig,
     ChatDetectorConfig,
@@ -6,10 +7,10 @@ from llama_stack.providers.remote.safety.fms.config import (
     EndpointType,
     DetectorParams,
 )
-from llama_stack.providers.remote.safety.fms.detectors.chat_detector import (
+from llama_stack.providers.remote.safety.fms.detectors.chat import (
     ChatDetector,
 )
-from llama_stack.providers.remote.safety.fms.detectors.content_detector import (
+from llama_stack.providers.remote.safety.fms.detectors.content import (
     ContentDetector,
 )
 from llama_stack.providers.remote.safety.fms.detectors.base import (
@@ -17,47 +18,85 @@ from llama_stack.providers.remote.safety.fms.detectors.base import (
     DetectorProvider,
 )
 
+# Type aliases for better readability
+ConfigType = Union[ContentDetectorConfig, ChatDetectorConfig, FMSSafetyProviderConfig]
+DetectorType = Union[BaseDetector, DetectorProvider]
+
+
+class DetectorConfigError(ValueError):
+    """Raised when detector configuration is invalid"""
+
+    pass
+
 
 async def get_adapter_impl(
-    config: Union[ContentDetectorConfig, ChatDetectorConfig, FMSSafetyProviderConfig],
-    _deps: Any = None,
-) -> Union[BaseDetector, DetectorProvider]:
-    """Get appropriate detector implementation(s) based on config type"""
+    config: ConfigType,
+    _deps: Dict[str, Any] = None,
+) -> DetectorType:
+    """Get appropriate detector implementation(s) based on config type.
 
-    # Handle provider config with multiple detectors
-    if isinstance(config, FMSSafetyProviderConfig):
-        detectors = {}
-        # Process all detectors from the config
-        for detector_id, detector_config in config.detectors.items():
-            if isinstance(detector_config, (ChatDetectorConfig, ContentDetectorConfig)):
-                # Config validation now happens in __post_init__
-                impl = await get_adapter_impl(detector_config)
+    Args:
+        config: Detector configuration object
+        _deps: Optional dependencies for testing/injection
+
+    Returns:
+        Configured detector implementation
+
+    Raises:
+        DetectorConfigError: If configuration is invalid
+        ValueError: If config type is not supported
+    """
+    try:
+        # Handle provider config with multiple detectors
+        if isinstance(config, FMSSafetyProviderConfig):
+            detectors: Dict[str, DetectorType] = {}
+
+            for detector_id, detector_config in config.detectors.items():
+                if not isinstance(
+                    detector_config, (ChatDetectorConfig, ContentDetectorConfig)
+                ):
+                    raise DetectorConfigError(
+                        f"Invalid detector config type for {detector_id}: {type(detector_config)}"
+                    )
+
+                impl = await get_adapter_impl(detector_config, _deps)
                 detectors[detector_id] = impl
-            else:
-                raise ValueError(f"Invalid detector config type for {detector_id}")
-        return DetectorProvider(detectors)
 
-    # Handle single detector config (unchanged)
-    if isinstance(config, ChatDetectorConfig):
-        impl = ChatDetector(config)
-    elif isinstance(config, ContentDetectorConfig):
-        impl = ContentDetector(config)
-    else:
-        raise ValueError(f"Unsupported config type: {type(config)}")
+            return DetectorProvider(detectors)
 
-    await impl.initialize()
-    return impl
+        # Handle single detector config
+        if isinstance(config, ChatDetectorConfig):
+            impl = ChatDetector(config)
+        elif isinstance(config, ContentDetectorConfig):
+            impl = ContentDetector(config)
+        else:
+            raise ValueError(f"Unsupported config type: {type(config)}")
+
+        await impl.initialize()
+        return impl
+
+    except Exception as e:
+        raise DetectorConfigError(
+            f"Failed to create detector implementation: {str(e)}"
+        ) from e
 
 
 __all__ = [
-    "get_adapter_impl",  # Main factory function
-    "ContentDetectorConfig",  # Base configs for detectors
+    # Factory
+    "get_adapter_impl",
+    # Configurations
+    "ContentDetectorConfig",
     "ChatDetectorConfig",
-    "FMSSafetyProviderConfig",  # Main provider config
-    "EndpointType",  # Endpoint type enum
-    "DetectorParams",  # Parameters for detectors
-    "ChatDetector",  # Detector implementations
+    "FMSSafetyProviderConfig",
+    "EndpointType",
+    "DetectorParams",
+    # Implementations
+    "ChatDetector",
     "ContentDetector",
-    "BaseDetector",  # Base classes
-    "DetectorProvider",  # Added this as it's used in the return type
+    "BaseDetector",
+    "DetectorProvider",
+    # Types
+    "ConfigType",
+    "DetectorType",
+    "DetectorConfigError",
 ]

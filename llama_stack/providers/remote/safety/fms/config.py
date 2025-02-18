@@ -1,7 +1,23 @@
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict, Any, Union, Set
+from urllib.parse import urlparse  # Added for URL validation
 from llama_models.schema_utils import json_schema_type
+
+
+# Added MessageType enum for better type safety
+class MessageType(Enum):
+    """Valid message types for detectors"""
+
+    USER = "user"
+    SYSTEM = "system"
+    TOOL = "tool"
+    COMPLETION = "completion"
+
+    @classmethod
+    def as_set(cls) -> Set[str]:
+        """Get all valid message types as a set"""
+        return {member.value for member in cls}
 
 
 class EndpointType(Enum):
@@ -57,13 +73,17 @@ class DetectorParams:
     risk_name: Optional[str] = None
     risk_definition: Optional[str] = None
 
+    # Added validation method
+    def validate(self) -> None:
+        """Validate detector parameters"""
+        if self.temperature is not None and not 0 <= self.temperature <= 1:
+            raise ValueError("Temperature must be between 0 and 1")
+
 
 @json_schema_type
 @dataclass
 class BaseDetectorConfig:
     """Base configuration for all detectors"""
-
-    VALID_MESSAGE_TYPES = {"user", "system", "tool", "completion"}
 
     detector_id: str
     is_chat: bool = False
@@ -72,21 +92,12 @@ class BaseDetectorConfig:
     confidence_threshold: float = 0.5
     use_orchestrator_api: bool = False
     detector_params: Optional[DetectorParams] = None
-    message_types: Set[str] = field(
-        default_factory=lambda: {"user", "system", "tool", "completion"}
-    )
+    # Updated to use MessageType enum
+    message_types: Set[str] = field(default_factory=lambda: MessageType.as_set())
 
-    def validate(self):
-        """Validate configuration after all settings are propagated"""
-        # Validate message types
-        invalid_types = self.message_types - self.VALID_MESSAGE_TYPES
-        if invalid_types:
-            raise ValueError(
-                f"Invalid message types: {invalid_types}. "
-                f"Valid types are: {self.VALID_MESSAGE_TYPES}"
-            )
-
-        # Validate URL configuration
+    # Added URL validation method
+    def _validate_urls(self) -> None:
+        """Validate URL configurations"""
         if not self.use_orchestrator_api and not self.base_url:
             raise ValueError("base_url is required when use_orchestrator_api is False")
         if self.use_orchestrator_api and not self.orchestrator_base_url:
@@ -94,15 +105,37 @@ class BaseDetectorConfig:
                 "orchestrator_base_url is required when use_orchestrator_api is True"
             )
 
-    def __post_init__(self):
-        """Set chat mode and validate message types immediately"""
-        # Only validate message types in post_init as they don't depend on orchestrator settings
-        invalid_types = self.message_types - self.VALID_MESSAGE_TYPES
+        # New URL format validation
+        for url in [self.base_url, self.orchestrator_base_url]:
+            if url:
+                parsed = urlparse(url)
+                if not all([parsed.scheme, parsed.netloc]):
+                    raise ValueError(f"Invalid URL format: {url}")
+                if parsed.scheme not in {"http", "https"}:
+                    raise ValueError(f"URL must use http or https scheme: {url}")
+
+    # Added separate message type validation
+    def _validate_message_types(self) -> None:
+        """Validate message type configuration"""
+        invalid_types = self.message_types - MessageType.as_set()
         if invalid_types:
             raise ValueError(
                 f"Invalid message types: {invalid_types}. "
-                f"Valid types are: {self.VALID_MESSAGE_TYPES}"
+                f"Valid types are: {MessageType.as_set()}"
             )
+
+    # Updated validate method
+    def validate(self) -> None:
+        """Validate configuration after all settings are propagated"""
+        self._validate_message_types()
+        self._validate_urls()
+        if self.detector_params:
+            self.detector_params.validate()
+
+    # Simplified post_init
+    def __post_init__(self) -> None:
+        """Validate configuration immediately after initialization"""
+        self._validate_message_types()
 
     @property
     def endpoint_type(self) -> EndpointType:
@@ -120,7 +153,7 @@ class ContentDetectorConfig(BaseDetectorConfig):
 
     def __post_init__(self):
         self.is_chat = False
-        super().__post_init__()  # Call parent's validation
+        super().__post_init__()
 
 
 @json_schema_type
@@ -130,7 +163,7 @@ class ChatDetectorConfig(BaseDetectorConfig):
 
     def __post_init__(self):
         self.is_chat = True
-        super().__post_init__()  # Call parent's validation
+        super().__post_init__()
 
 
 @json_schema_type
@@ -142,6 +175,23 @@ class FMSSafetyProviderConfig:
     orchestrator_base_url: Optional[str] = None
     use_orchestrator_api: bool = False
 
+    # Added generic detector getter
+    def get_detectors_by_type(
+        self, message_type: Union[str, MessageType]
+    ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
+        """Get detectors configured for a specific message type"""
+        type_value = (
+            message_type.value
+            if isinstance(message_type, MessageType)
+            else message_type
+        )
+        return {
+            detector_id: detector
+            for detector_id, detector in self.detectors.items()
+            if type_value in detector.message_types
+        }
+
+    # Updated properties to use get_detectors_by_type
     @property
     def all_detectors(
         self,
@@ -154,45 +204,43 @@ class FMSSafetyProviderConfig:
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
         """Get detectors configured for user messages"""
-        return {
-            detector_id: detector
-            for detector_id, detector in self.detectors.items()
-            if "user" in detector.message_types
-        }
+        return self.get_detectors_by_type(MessageType.USER)
 
     @property
     def system_message_detectors(
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
         """Get detectors configured for system messages"""
-        return {
-            detector_id: detector
-            for detector_id, detector in self.detectors.items()
-            if "system" in detector.message_types
-        }
+        return self.get_detectors_by_type(MessageType.SYSTEM)
 
     @property
     def tool_response_detectors(
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
         """Get detectors configured for tool responses"""
-        return {
-            detector_id: detector
-            for detector_id, detector in self.detectors.items()
-            if "tool" in detector.message_types
-        }
+        return self.get_detectors_by_type(MessageType.TOOL)
 
     @property
     def completion_message_detectors(
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
         """Get detectors configured for completion messages"""
-        return {
-            detector_id: detector
-            for detector_id, detector in self.detectors.items()
-            if "completion" in detector.message_types
-        }
+        return self.get_detectors_by_type(MessageType.COMPLETION)
 
+    # Added safe detector settings update method
+    def _update_detector_settings(self, detector: BaseDetectorConfig) -> None:
+        """Update detector settings with orchestrator configuration"""
+        detector.use_orchestrator_api = True
+        detector.orchestrator_base_url = self.orchestrator_base_url
+
+    # Updated propagate method to use _update_detector_settings
+    def propagate_orchestrator_settings(self) -> None:
+        """Propagate orchestrator settings to all detectors"""
+        if self.use_orchestrator_api:
+            for detector in self.all_detectors.values():
+                self._update_detector_settings(detector)
+
+    # Existing validation methods remain unchanged
     def validate_mixed_api_usage(self):
         """Check for mixed API usage across all detector types"""
         mixed_api_detectors = {
@@ -234,15 +282,6 @@ class FMSSafetyProviderConfig:
                 raise ValueError(
                     f"When using orchestrator API, base_url should not be specified for detectors: {invalid_detectors}. "
                     "All requests will be routed through the orchestrator_base_url."
-                )
-
-    def propagate_orchestrator_settings(self):
-        """Propagate orchestrator settings to all detectors"""
-        if self.use_orchestrator_api:
-            for detector in self.all_detectors.values():
-                object.__setattr__(detector, "use_orchestrator_api", True)
-                object.__setattr__(
-                    detector, "orchestrator_base_url", self.orchestrator_base_url
                 )
 
     def __post_init__(self):
