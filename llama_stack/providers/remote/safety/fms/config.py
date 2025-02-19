@@ -95,6 +95,7 @@ class BaseDetectorConfig:
     detector_params: Optional[DetectorParams] = None
     # Updated to use MessageType enum
     message_types: Set[str] = field(default_factory=lambda: MessageType.as_set())
+    auth_token = Optional[str] = None
 
     # Added URL validation method
     def _validate_urls(self) -> None:

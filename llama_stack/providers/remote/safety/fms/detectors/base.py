@@ -227,6 +227,9 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         if not self.config.use_orchestrator_api and self.config.detector_id:
             headers["detector-id"] = self.config.detector_id
 
+        if self.config.auth_token:
+            headers["Authorization"] = f"Bearer {self.config.auth_token}"
+
         return headers
 
     def _prepare_request_payload(
