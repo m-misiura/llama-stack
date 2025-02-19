@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -21,12 +22,18 @@ from llama_stack.apis.safety import (
     Safety,
     SafetyViolation,
     ViolationLevel,
+    ShieldStore,
 )
 from llama_stack.apis.shields import Shield
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
 from llama_stack.providers.remote.safety.fms.config import (
     BaseDetectorConfig,
     EndpointType,
+    BaseDetectorConfig,
+    ChatDetectorConfig,
+    ContentDetectorConfig,
+    DetectorParams,
+    FMSSafetyProviderConfig,
 )
 
 # Configure logging
@@ -121,7 +128,18 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         self.registered_shields: List[Shield] = []
         self.score_threshold: float = config.confidence_threshold
         self._http_client: Optional[httpx.AsyncClient] = None
+        self._shield_store: Optional[ShieldStore] = SimpleShieldStore()  # Add this line
         self._validate_config()
+
+    @property
+    def shield_store(self) -> ShieldStore:
+        """Get shield store instance"""
+        return self._shield_store
+
+    @shield_store.setter
+    def shield_store(self, value: ShieldStore) -> None:
+        """Set shield store instance"""
+        self._shield_store = value
 
     def _validate_config(self) -> None:
         """Validate detector configuration"""
@@ -391,40 +409,135 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         return await self._run_shield_impl(shield_id, filtered_messages, params)
 
 
-class DetectorProvider:
-    """Provider that manages multiple detectors and allows running them all at once"""
+class SimpleShieldStore(ShieldStore):
+    """Dynamic shield store that adapts to detector configurations"""
 
+    def __init__(self):
+        self._detector_configs = {}
+
+    def register_detector_config(self, detector_id: str, config: Any) -> None:
+        """Register a detector's configuration for shield creation"""
+        self._detector_configs[detector_id] = config
+
+    async def get_shield(self, identifier: str) -> Shield:
+        """Get a shield by identifier with metadata from detector config"""
+        config = self._detector_configs.get(identifier)
+
+        if not config:
+            # Fallback for unknown detectors
+            return Shield(
+                identifier=identifier,
+                provider_id="fms-safety",
+                provider_resource_id=identifier,
+                type="shield",
+                name=f"{identifier} Shield",
+                description=f"Auto-generated shield for {identifier}",
+            )
+
+        # Build metadata based on detector type and params
+        metadata = {
+            "detector_type": identifier,
+            "base_url": config.base_url,
+            "message_types": (
+                list(config.message_types) if hasattr(config, "message_types") else []
+            ),
+        }
+
+        # Add detector-specific parameters
+        if hasattr(config, "detector_params"):
+            if isinstance(config, ContentDetectorConfig):
+                metadata.update(
+                    {
+                        "patterns": (
+                            config.detector_params.regex
+                            if hasattr(config.detector_params, "regex")
+                            else []
+                        ),
+                    }
+                )
+            elif isinstance(config, ChatDetectorConfig):
+                metadata.update(
+                    {
+                        "temperature": config.detector_params.temperature,
+                        "risk_name": config.detector_params.risk_name,
+                        "risk_definition": config.detector_params.risk_definition,
+                    }
+                )
+
+        return Shield(
+            identifier=identifier,
+            provider_id="fms-safety",
+            provider_resource_id=config.detector_id,
+            type="shield",
+            name=f"{identifier} Shield",
+            description=f"Auto-generated shield for {identifier}",
+            metadata=metadata,
+        )
+
+
+class DetectorProvider(Safety):
     def __init__(self, detectors: Dict[str, BaseDetector]) -> None:
-        """Initialize provider with detectors"""
         if not detectors:
             raise DetectorConfigError("At least one detector must be provided")
+
         self.detectors = detectors
+        self._shield_store = SimpleShieldStore()
+
+        # Register each detector's configuration
+        for detector_id, detector in detectors.items():
+            self._shield_store.register_detector_config(detector_id, detector.config)
+            detector.shield_store = self._shield_store
+
+    async def initialize(self) -> None:
+        """Initialize provider and auto-register shields"""
+        for detector_id, detector in self.detectors.items():
+            shield = await self._shield_store.get_shield(detector_id)
+            await self.register_shield(shield)
+            logger.info(f"Auto-registered shield for detector: {detector_id}")
+
+    @property
+    def shield_store(self) -> ShieldStore:
+        """Get shield store instance"""
+        return self._shield_store
+
+    @shield_store.setter
+    def shield_store(self, value: ShieldStore) -> None:
+        """Set shield store instance"""
+        self._shield_store = value
+
+    # add attribute register_shield
+    async def register_shield(self, shield: Shield) -> None:
+        """Register a shield with all detectors"""
+        for detector in self.detectors.values():
+            await detector.register_shield(shield)
 
     async def run_shield(
         self,
         shield_id: str,
         messages: List[Message],
-    ) -> Dict[str, RunShieldResponse]:
-        """Run all detectors and return results from each"""
+        params: Optional[Dict[str, Any]] = None,
+    ) -> RunShieldResponse:
+        """Run all detectors and return first violation found"""
         if not shield_id:
             raise DetectorValidationError("Shield ID is required")
         if not messages:
-            return {}
+            return RunShieldResponse(violation=None)
 
-        results = {}
         for name, detector in self.detectors.items():
             try:
                 response = await detector.run_shield(shield_id, messages)
-                results[name] = response
+                if response.violation:  # Return first violation found
+                    return response
             except Exception as e:
                 logger.error(f"Error running detector {name}: {str(e)}")
-                results[name] = RunShieldResponse(
+                return RunShieldResponse(
                     violation=SafetyViolation(
                         user_message=f"Detector {name} failed: {str(e)}",
                         violation_level=ViolationLevel.ERROR,
                     )
                 )
-        return results
+
+        return RunShieldResponse(violation=None)  # No violations found
 
     async def shutdown(self) -> None:
         """Shutdown all detectors"""

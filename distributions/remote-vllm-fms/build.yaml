@@ -1,0 +1,10 @@
+version: '2'
+built_at: '2025-02-19T00:00:00Z'
+distribution_spec:
+  description: Use remote vLLM for inference and FMS for safety checks
+  providers:
+    inference:
+    - remote::vllm
+    safety:
+    - remote::fms
+image_type: conda

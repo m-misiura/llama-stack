@@ -93,6 +93,11 @@ class ContentDetector(BaseDetector):
 
     def _extract_detections(self, response: Dict[str, Any]) -> DetectorResponse:
         """Extract detections from API response"""
+        if not response:
+            logger.debug("Empty response received")
+            return []
+
+        """Extract detections from API response"""
         if self.config.use_orchestrator_api:
             detections = response.get("detections", [])
             logger.debug(f"Orchestrator detections: {detections}")

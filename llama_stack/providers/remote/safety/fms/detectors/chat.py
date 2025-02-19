@@ -114,6 +114,9 @@ class ChatDetector(BaseDetector):
             ) from e
 
     def _extract_detections(self, response: Dict[str, Any]) -> DetectorResponse:
+        if not response:
+            logger.debug("Empty response received")
+            return []
         """Extract detections from API response"""
         if self.config.use_orchestrator_api:
             detections = response.get("detections", [])

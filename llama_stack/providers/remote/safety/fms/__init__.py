@@ -1,5 +1,8 @@
+import logging
 from typing import Any, Dict, Union
 
+# Remove register_provider import since registration is in registry/safety.py
+from llama_stack.apis.safety import Safety
 from llama_stack.providers.remote.safety.fms.config import (
     ChatDetectorConfig,
     ContentDetectorConfig,
@@ -11,12 +14,11 @@ from llama_stack.providers.remote.safety.fms.detectors.base import (
     BaseDetector,
     DetectorProvider,
 )
-from llama_stack.providers.remote.safety.fms.detectors.chat import (
-    ChatDetector,
-)
-from llama_stack.providers.remote.safety.fms.detectors.content import (
-    ContentDetector,
-)
+from llama_stack.providers.remote.safety.fms.detectors.chat import ChatDetector
+from llama_stack.providers.remote.safety.fms.detectors.content import ContentDetector
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 # Type aliases for better readability
 ConfigType = Union[ContentDetectorConfig, ChatDetectorConfig, FMSSafetyProviderConfig]
@@ -29,14 +31,27 @@ class DetectorConfigError(ValueError):
     pass
 
 
+async def create_fms_provider(config: Dict[str, Any]) -> Safety:
+    """Create FMS safety provider instance.
+
+    Args:
+        config: Configuration dictionary
+
+    Returns:
+        Safety: Configured FMS safety provider
+    """
+    logger.debug("Creating FMS provider")
+    return await get_adapter_impl(FMSSafetyProviderConfig(**config))
+
+
 async def get_adapter_impl(
-    config: ConfigType,
+    config: Union[Dict[str, Any], FMSSafetyProviderConfig],
     _deps: Dict[str, Any] = None,
 ) -> DetectorType:
     """Get appropriate detector implementation(s) based on config type.
 
     Args:
-        config: Detector configuration object
+        config: Configuration dictionary or FMSSafetyProviderConfig instance
         _deps: Optional dependencies for testing/injection
 
     Returns:
@@ -44,36 +59,28 @@ async def get_adapter_impl(
 
     Raises:
         DetectorConfigError: If configuration is invalid
-        ValueError: If config type is not supported
     """
     try:
-        # Handle provider config with multiple detectors
         if isinstance(config, FMSSafetyProviderConfig):
-            detectors: Dict[str, DetectorType] = {}
-
-            for detector_id, detector_config in config.detectors.items():
-                if not isinstance(
-                    detector_config, (ChatDetectorConfig, ContentDetectorConfig)
-                ):
-                    raise DetectorConfigError(
-                        f"Invalid detector config type for {detector_id}: {type(detector_config)}"
-                    )
-
-                impl = await get_adapter_impl(detector_config, _deps)
-                detectors[detector_id] = impl
-
-            return DetectorProvider(detectors)
-
-        # Handle single detector config
-        if isinstance(config, ChatDetectorConfig):
-            impl = ChatDetector(config)
-        elif isinstance(config, ContentDetectorConfig):
-            impl = ContentDetector(config)
+            provider_config = config
         else:
-            raise ValueError(f"Unsupported config type: {type(config)}")
+            provider_config = FMSSafetyProviderConfig(**config)
 
-        await impl.initialize()
-        return impl
+        detectors: Dict[str, DetectorType] = {}
+
+        for detector_id, detector_config in provider_config.detectors.items():
+            if isinstance(detector_config, ChatDetectorConfig):
+                impl = ChatDetector(detector_config)
+            elif isinstance(detector_config, ContentDetectorConfig):
+                impl = ContentDetector(detector_config)
+            else:
+                raise DetectorConfigError(
+                    f"Invalid detector config type for {detector_id}: {type(detector_config)}"
+                )
+            await impl.initialize()
+            detectors[detector_id] = impl
+
+        return DetectorProvider(detectors)
 
     except Exception as e:
         raise DetectorConfigError(
@@ -82,8 +89,9 @@ async def get_adapter_impl(
 
 
 __all__ = [
-    # Factory
+    # Factory methods
     "get_adapter_impl",
+    "create_fms_provider",
     # Configurations
     "ContentDetectorConfig",
     "ChatDetectorConfig",
