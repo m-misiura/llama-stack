@@ -3,6 +3,7 @@ image_name: remote-vllm-fms
 apis:
   - inference
   - safety
+  - shields
 
 providers:
   inference:
