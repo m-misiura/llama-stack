@@ -449,14 +449,18 @@ class SimpleShieldStore(ShieldStore):
                 f"Shield store {self._store_id} creating shield for {identifier} using config"
             )
 
-            # Extract detector params
+            # Extract detector params safely
             detector_params = {}
-            if hasattr(config, "detector_params"):
-                detector_params = {
-                    k: v
-                    for k, v in vars(config.detector_params).items()
-                    if v is not None
-                }
+            if hasattr(config, "detector_params") and config.detector_params:
+                if hasattr(config.detector_params, "__dict__"):
+                    detector_params = {
+                        k: v
+                        for k, v in vars(config.detector_params).items()
+                        if v is not None
+                    }
+                else:
+                    # Handle case where detector_params is a dict or other type
+                    detector_params = config.detector_params
 
             # Create shield with all required fields
             shield = Shield(
