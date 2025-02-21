@@ -6,7 +6,7 @@
 
 from typing import Any, Dict, List, Literal, Optional, Protocol, runtime_checkable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from llama_stack.apis.resource import Resource, ResourceType
 from llama_stack.providers.utils.telemetry.trace_protocol import trace_protocol
@@ -15,6 +15,15 @@ from llama_stack.schema_utils import json_schema_type, webmethod
 
 class CommonShieldFields(BaseModel):
     params: Optional[Dict[str, Any]] = None
+
+
+class CommonShieldFields(BaseModel):
+    """Common fields for shields"""
+
+    params: Dict[str, Any] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    name: str = ""
+    description: str = ""
 
 
 @json_schema_type

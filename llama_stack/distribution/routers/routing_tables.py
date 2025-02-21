@@ -268,6 +268,8 @@ class ModelsRoutingTable(CommonRoutingTableImpl, Models):
 
 
 class ShieldsRoutingTable(CommonRoutingTableImpl, Shields):
+    """Routing table for shields"""
+
     async def initialize(self) -> None:
         """Initialize routing table and all shield providers"""
         if hasattr(self, "_initialized") and self._initialized:
@@ -284,6 +286,7 @@ class ShieldsRoutingTable(CommonRoutingTableImpl, Shields):
                 # Get shields from provider and register them
                 shields_response = await provider.list_shields()
                 for shield in shields_response.data:
+                    shield.type = "shield"  # Ensure type is set
                     await self.dist_registry.register(shield)
                 logger.info(
                     f"Provider {provider_id} initialized with {len(shields_response.data)} shields"
@@ -294,18 +297,6 @@ class ShieldsRoutingTable(CommonRoutingTableImpl, Shields):
         except Exception as e:
             logger.error(f"Failed to initialize ShieldRoutingTable: {e}")
             raise
-
-    async def list_shields(self) -> ListShieldsResponse:
-        """List all registered shields"""
-        if not self._initialized:
-            await self.initialize()
-        return ListShieldsResponse(data=await self.get_all_with_type("shield"))
-
-    async def get_shield(self, identifier: str) -> Optional[Shield]:
-        """Get shield by identifier"""
-        if not self._initialized:
-            await self.initialize()
-        return await self.get_object_by_identifier("shield", identifier)
 
     async def register_shield(
         self,
@@ -318,18 +309,71 @@ class ShieldsRoutingTable(CommonRoutingTableImpl, Shields):
         if not self._initialized:
             await self.initialize()
 
-        # Create shield object
-        shield = Shield(
-            identifier=shield_id,
-            provider_resource_id=provider_shield_id or shield_id,
+        # Get provider to register shield
+        provider = self.get_provider_impl(shield_id, provider_id)
+        shield = await provider.register_shield(
+            shield_id=shield_id,
+            provider_shield_id=provider_shield_id,
             provider_id=provider_id,
-            type="shield",
             params=params or {},
         )
 
-        # Register with provider and store
-        registered_shield = await self.register_object(shield)
-        return registered_shield
+        # Ensure all required fields
+        shield.type = "shield"
+        if not shield.params:
+            shield.params = {}
+        if not shield.metadata:
+            shield.metadata = {}
+
+        # Register with distribution registry
+        await self.dist_registry.register(shield)
+        return shield
+
+    async def get_shield(self, identifier: str) -> Optional[Shield]:
+        """Get shield by identifier"""
+        if not self._initialized:
+            await self.initialize()
+
+        try:
+            # Check registry first
+            shield = await self.get_object_by_identifier("shield", identifier)
+            if shield:
+                # Ensure fields are properly set even for cached shields
+                shield.type = "shield"
+                if shield.params is None:
+                    shield.params = {}
+                if not hasattr(shield, "metadata"):
+                    shield.metadata = {}
+                return shield
+
+            # Try getting from provider
+            provider = self.get_provider_impl(identifier)
+            shield = await provider.get_shield(identifier)
+
+            if shield:
+                # Ensure all required fields
+                shield.type = "shield"
+                if shield.params is None:
+                    shield.params = {}
+                if not hasattr(shield, "metadata"):
+                    shield.metadata = {}
+
+                # Register with dist registry
+                await self.dist_registry.register(shield)
+                return shield
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting shield {identifier}: {e}")
+            raise ValueError(f"Failed to get shield {identifier}: {str(e)}")
+
+    async def list_shields(self) -> ListShieldsResponse:
+        """List all registered shields"""
+        if not self._initialized:
+            await self.initialize()
+        shields = await self.get_all_with_type("shield")
+        return ListShieldsResponse(data=shields)
 
 
 class VectorDBsRoutingTable(CommonRoutingTableImpl, VectorDBs):
