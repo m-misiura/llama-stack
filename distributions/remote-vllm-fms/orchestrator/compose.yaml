@@ -1,0 +1,26 @@
+services:
+  llamastack:
+    build:
+      context: ../../..
+      dockerfile: ./distributions/remote-vllm-fms/orchestrator/Dockerfile
+    ports:
+      - "${LLAMA_STACK_PORT:-5001}:5001"
+    env_file:
+      - .env
+    platform: ${DOCKER_DEFAULT_PLATFORM:-linux/amd64}
+    volumes:
+      - ~/.llama:/root/.llama
+      - ./run.yaml:/root/llamastack-run-remote-vllm.yaml
+    network_mode: ${NETWORK_MODE:-bridge}
+    environment:
+      - VLLM_URL=${VLLM_URL}
+      - VLLM_API_TOKEN=${VLLM_API_TOKEN}
+      - INFERENCE_MODEL=${INFERENCE_MODEL}
+      - MAX_TOKENS=${MAX_TOKENS:-4096}
+      - FMS_ORCHESTRATOR_URL=${FMS_ORCHESTRATOR_URL}
+      - SQLITE_STORE_DIR=/root/.llama/distributions/remote-vllm-fms/orchestrator
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
