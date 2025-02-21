@@ -37,14 +37,35 @@ class Shield:
     """Test shield configuration"""
 
     identifier: str
-    provider_id: str = field(default="fms")
+    provider_id: str = field(default="fms-safety")  # Match real provider ID
+    provider_resource_id: str = field(init=False)
+    type: str = field(default="shield")
+    params: Dict[str, Any] = field(default_factory=dict)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self):
+        object.__setattr__(self, "provider_resource_id", self.identifier)
 
 
 class MockShieldStore:
     """Mock shield storage for testing"""
 
+    def __init__(self):
+        self._shields = {}
+        self._detector_configs = {}
+
+    def register_detector_config(self, detector_id: str, config: Any) -> None:
+        """Register detector configuration"""
+        self._detector_configs[detector_id] = config
+
     async def get_shield(self, shield_id: str) -> Shield:
-        return Shield(identifier=shield_id)
+        """Get or create shield by identifier"""
+        if shield_id not in self._shields:
+            config = self._detector_configs.get(shield_id)
+            self._shields[shield_id] = Shield(
+                identifier=shield_id, params={"regex": ["email"]} if config else {}
+            )
+        return self._shields[shield_id]
 
 
 # %% Helper functions
@@ -52,12 +73,21 @@ async def setup_detector(config: FMSSafetyProviderConfig):
     """Setup detector with shield store"""
     detectors = await get_adapter_impl(config)
     shield_store = MockShieldStore()
+
+    # Register configs first
+    for detector_id, detector_config in config.detectors.items():
+        shield_store.register_detector_config(detector_id, detector_config)
+
+    # Then update detectors
     for detector in detectors.detectors.values():
         detector.shield_store = shield_store
+
     return detectors
 
 
-async def run_test(detectors, messages: List[Message], shield_id: str = "test-shield"):
+async def run_test(
+    detectors, messages: List[Message], shield_id: str = "regex"
+):  # Changed default
     """Run test and print results"""
     response = await detectors.run_shield(shield_id, messages)
     print(f"Shield response: {response}")
