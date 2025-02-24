@@ -1,0 +1,10 @@
+version: '2'
+built_at: '2025-02-19T00:00:00Z'
+distribution_spec:
+  description: FMS safety with orchestrator API and multiple threshold configuration
+  providers:
+    inference:
+    - remote::vllm
+    safety:
+    - remote::fms
+image_type: conda
