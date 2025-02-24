@@ -15,7 +15,13 @@ def resolve_detector_config(
 
     # Convert detector_params if present
     if "detector_params" in data and isinstance(data["detector_params"], dict):
-        data["detector_params"] = DetectorParams(**data["detector_params"])
+        params = data["detector_params"]
+        if "detectors" in params:
+            # Handle orchestrator mode
+            data["detector_params"] = DetectorParams(detectors=params["detectors"])
+        else:
+            # Handle direct mode
+            data["detector_params"] = DetectorParams(**params)
 
     # Determine detector type
     if data.get("is_chat", False):
@@ -89,6 +95,7 @@ class DetectorParams:
     temperature: Optional[float] = None
     risk_name: Optional[str] = None
     risk_definition: Optional[str] = None
+    detectors: Optional[Dict[str, Dict[str, Any]]] = None
 
     def validate(self) -> None:
         """Validate detector parameters"""

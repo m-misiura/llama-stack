@@ -254,23 +254,50 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         self, messages: List[Message], params: Optional[Dict[str, Any]] = None
     ) -> RequestPayload:
         """Prepare request payload based on endpoint type and orchestrator mode"""
-        detector_params = {}
-        if self.config.detector_params:
-            detector_params = {
-                k: v
-                for k, v in vars(self.config.detector_params).items()
-                if v is not None
-            }
-
         if self.config.use_orchestrator_api:
-            payload: RequestPayload = {
-                "detectors": {self.config.detector_id: detector_params}
-            }
+            payload: RequestPayload = {}
+
+            # Handle detector configuration
+            if self.config.detector_params:
+                # Case 1: New style with explicit detectors configuration
+                if (
+                    hasattr(self.config.detector_params, "detectors")
+                    and self.config.detector_params.detectors
+                ):
+                    # Pass through detectors configuration as-is
+                    payload["detectors"] = self.config.detector_params.detectors
+                else:
+                    # Legacy style: Convert any detector params to detector config
+                    detector_config = {}
+                    detector_params = {
+                        k: v
+                        for k, v in vars(self.config.detector_params).items()
+                        if v is not None and k != "detectors"
+                    }
+
+                    if detector_params:
+                        detector_config[self.config.detector_id] = detector_params
+
+                    payload["detectors"] = detector_config
+
+            # Add content or messages based on mode
             if self.config.is_chat:
                 payload["messages"] = [msg.dict() for msg in messages]
             else:
                 payload["content"] = messages[0].content
+
+            logger.debug(f"Prepared orchestrator payload: {payload}")
+            return payload
         else:
+            # Handle direct mode (unchanged)
+            detector_params = {}
+            if self.config.detector_params:
+                detector_params = {
+                    k: v
+                    for k, v in vars(self.config.detector_params).items()
+                    if v is not None
+                }
+
             if self.config.is_chat:
                 payload = {
                     "messages": [msg.dict() for msg in messages],
@@ -286,7 +313,7 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
                     ),
                 }
 
-        return payload
+            return payload
 
     async def _make_request(
         self,

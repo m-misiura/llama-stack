@@ -81,11 +81,18 @@ class ContentDetector(BaseDetector):
         detector_params = self._extract_detector_params()
 
         if self.config.use_orchestrator_api:
-            return {
-                "detectors": {self.config.detector_id: detector_params},
-                "content": content,
-            }
+            # Use detectors configuration directly from detector_params if available
+            if (
+                hasattr(self.config.detector_params, "detectors")
+                and self.config.detector_params.detectors
+            ):
+                return {
+                    "detectors": self.config.detector_params.detectors,
+                    "content": content,
+                }
 
+        # Fallback to legacy format
+        detector_params = self._extract_detector_params()
         return {
             "contents": [content],
             "detector_params": detector_params if detector_params else params or {},
