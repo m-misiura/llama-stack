@@ -62,23 +62,6 @@ class ChatDetector(BaseDetector):
         self.config: ChatDetectorConfig = config
         logger.info(f"Initialized ChatDetector with config: {vars(config)}")
 
-    def _prepare_chat_request(
-        self, messages: List[ChatMessage], params: Optional[Dict[str, Any]] = None
-    ) -> ChatRequest:
-        """Prepare the request based on API mode"""
-        detector_params = self._extract_detector_params()
-
-        if self.config.use_orchestrator_api:
-            return {
-                "detectors": {self.config.detector_id: detector_params},
-                "messages": messages,
-            }
-
-        return {
-            "messages": messages,
-            "detector_params": detector_params if detector_params else params or {},
-        }
-
     def _extract_detector_params(self) -> Dict[str, Any]:
         """Extract non-null detector parameters"""
         if not self.config.detector_params:
@@ -89,6 +72,54 @@ class ChatDetector(BaseDetector):
         }
         logger.debug(f"Extracted detector params: {params}")
         return params
+
+    def _prepare_chat_request(
+        self, messages: List[ChatMessage], params: Optional[Dict[str, Any]] = None
+    ) -> ChatRequest:
+        """Prepare the request based on API mode"""
+        # Extract detector params and ensure they're not None
+        detector_params = self._extract_detector_params()
+
+        # Format messages for detector API
+        formatted_messages = []
+        for msg in messages:
+            formatted_msg = {
+                "content": msg.get("content", ""),
+                "role": "user",  # Always send as user for detector API
+            }
+            formatted_messages.append(formatted_msg)
+
+        # For direct API, ensure params are passed correctly
+        if self.config.use_orchestrator_api:
+            return {
+                "detectors": {
+                    self.config.detector_id: {**(params or {}), **detector_params}
+                },
+                "messages": formatted_messages,
+            }
+
+        # Direct API format with detector_params at root level
+        return {
+            "messages": formatted_messages,
+            "detector_params": {  # Move params to root level
+                "risk_name": detector_params.get("risk_name"),
+                "risk_definition": detector_params.get("risk_definition"),
+                "temperature": detector_params.get("temperature", 0.0),
+            },
+        }
+
+        def _extract_detector_params(self) -> Dict[str, Any]:
+            """Extract non-null detector parameters"""
+            if not self.config.detector_params:
+                return {}
+
+            params = {
+                k: v
+                for k, v in vars(self.config.detector_params).items()
+                if v is not None
+            }
+            logger.debug(f"Extracted detector params: {params}")
+            return params
 
     async def _call_detector_api(
         self,
@@ -182,10 +213,17 @@ class ChatDetector(BaseDetector):
             self._validate_shield(shield)
 
             logger.info(f"Processing {len(messages)} message(s)")
-            chat_messages = [
-                {"role": msg.role, "content": msg.content} for msg in messages
-            ]
 
+            # Convert messages keeping only necessary fields
+            chat_messages = []
+            for msg in messages:
+                message_dict = {"content": msg.content, "role": msg.role}
+                # Preserve type if present for internal processing
+                if hasattr(msg, "type"):
+                    message_dict["type"] = msg.type
+                chat_messages.append(message_dict)
+
+            logger.debug(f"Prepared messages: {chat_messages}")
             detections = await self._call_detector_api(chat_messages, params)
 
             for detection in detections:
