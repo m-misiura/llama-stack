@@ -21,7 +21,7 @@ services:
       # FMS Configuration
       - FMS_REGEX_URL=${FMS_REGEX_URL}
       # Storage Configuration
-      - SQLITE_STORE_DIR=/root/.llama/distributions/remote-vllm-fms
+      - SQLITE_STORE_DIR=/root/.llama/distributions/remote-vllm-fms/single-detector
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001/v1/health"]
       interval: 30s

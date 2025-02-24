@@ -1,5 +1,5 @@
 version: '2'
-image_name: remote-vllm-fms
+image_name: remote-vllm-fms-single-detector
 apis:
   - inference
   - safety
@@ -32,7 +32,7 @@ providers:
 
 metadata_store:
   type: sqlite
-  db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/remote-vllm-fms}/registry.db
+  db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/remote-vllm-fms/single-detector}/registry.db
 
 models:
   - model_id: "meta-llama/Llama-3.1-8B-Instruct"

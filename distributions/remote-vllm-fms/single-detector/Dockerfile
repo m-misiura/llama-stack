@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir -e .[distribution,server,telemetry] && \
         openai
 
 # Copy distribution files
-COPY distributions/remote-vllm-fms/run.yaml /root/llamastack-run-remote-vllm.yaml
+COPY distributions/remote-vllm-fms/single-detector/run.yaml /root/llamastack-run-remote-vllm.yaml
 
 EXPOSE 5001
 
