@@ -1,0 +1,57 @@
+version: '2'
+image_name: remote-vllm-fms-three-detectors
+apis:
+  - inference
+  - safety
+  - shields
+
+providers:
+  inference:
+    - provider_id: vllm-inference
+      provider_type: remote::vllm
+      config:
+        url: ${env.VLLM_URL}
+        max_tokens: ${env.MAX_TOKENS:4096}
+        api_token: ${env.VLLM_API_TOKEN}
+        model_name: ${env.INFERENCE_MODEL}
+  
+  safety:
+    - provider_id: fms-safety
+      provider_type: remote::fms
+      config:
+        orchestrator_base_url: ${env.FMS_ORCHESTRATOR_URL}
+        use_orchestrator_api: true
+        detectors:
+          content:
+            detector_id: content
+            confidence_threshold: 0.5
+            message_types: ["user", "system"]
+            detector_params:
+              detectors:
+                hap: {}
+                regex:
+                  regex: ["email"]
+          chat:
+            detector_id: granite
+            is_chat: true
+            confidence_threshold: 0.01
+            message_types: ["system", "completion"]
+            detector_params:
+              temperature: 0.0
+              risk_name: "Star Wars"
+              risk_definition: "The message contains references to Star Wars, especially Luke Skywalker."
+
+metadata_store:
+  type: sqlite
+  db_path: ${env.SQLITE_STORE_DIR:~/.llama/distributions/remote-vllm-fms/orch-contents-chat}/registry.db
+
+models:
+  - model_id: "meta-llama/Llama-3.1-8B-Instruct"
+    provider_id: vllm-inference
+    name: "Llama 3.1 8B Instruct"
+    description: "Llama language model for text generation"
+
+server:
+  port: 5001
+  tls_certfile: null
+  tls_keyfile: null
