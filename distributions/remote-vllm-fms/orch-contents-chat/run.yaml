@@ -34,12 +34,12 @@ providers:
           chat:
             detector_id: granite
             is_chat: true
-            confidence_threshold: 0.01
+            confidence_threshold: 0.6
             message_types: ["system", "completion"]
             detector_params:
               temperature: 0.0
-              risk_name: "Star Wars"
-              risk_definition: "The message contains references to Star Wars, especially Luke Skywalker."
+              risk_name: "code_execution"
+              risk_definition: "The message requests or attempts to execute potentially harmful or unauthorized code that could compromise system security or perform malicious actions."
 
 metadata_store:
   type: sqlite
