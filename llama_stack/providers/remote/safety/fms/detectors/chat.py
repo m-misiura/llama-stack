@@ -151,6 +151,17 @@ class ChatDetector(BaseDetector):
         """Extract detections from API response"""
         if self.config.use_orchestrator_api:
             detections = response.get("detections", [])
+            if not detections:
+                # Add default detection when none returned
+                logger.debug("No detections found, adding default low-score detection")
+                return [
+                    {
+                        "detection_type": "risk",
+                        "detection": "No",
+                        "detector_id": self.config.detector_id,
+                        "score": 0.0,  # Default low score
+                    }
+                ]
             logger.debug(f"Orchestrator detections: {detections}")
             return detections
 
