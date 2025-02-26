@@ -426,12 +426,15 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
             logger.debug("No messages provided")
             return RunShieldResponse(violation=None)
 
+        # Validate message types first
         filtered_messages = self._filter_messages(messages)
         if not filtered_messages:
-            logger.debug(
-                f"No messages of configured types {self.config.message_types} to process"
+            return RunShieldResponse(
+                violation=SafetyViolation(
+                    violation_level=ViolationLevel.ERROR,
+                    user_message=f"Message type not supported. Shield {shield_id} only handles: {list(self.config.message_types)}",
+                )
             )
-            return RunShieldResponse(violation=None)
 
         return await self._run_shield_impl(shield_id, filtered_messages, params)
 
