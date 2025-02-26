@@ -548,16 +548,19 @@ class DetectorProvider(Safety, Shields):
         self._shields: Dict[str, Shield] = {}
         self._initialized = False
         self._provider_id = id(self)
+        self._detector_key_to_id = {}  # Add mapping dict
         logger.info(
             f"Created DetectorProvider {self._provider_id} with {len(detectors)} detectors"
         )
 
-        # Pre-register detector configs and initialize shield store
-        for detector_id, detector in detectors.items():
+        # Pre-register detector configs and map keys to IDs
+        for detector_key, detector in detectors.items():
             detector.shield_store = self._shield_store
-            self._shield_store.register_detector_config(detector_id, detector.config)
+            config_id = detector.config.detector_id
+            self._detector_key_to_id[detector_key] = config_id  # Store mapping
+            self._shield_store.register_detector_config(config_id, detector.config)
             logger.info(
-                f"Provider {self._provider_id} registered config for detector: {detector_id}"
+                f"Provider {self._provider_id} registered config for detector: {config_id}"
             )
 
     @property
@@ -592,43 +595,38 @@ class DetectorProvider(Safety, Shields):
 
         try:
             # Phase 1: Initialize detectors
-            for detector_id, detector in self.detectors.items():
-                logger.info(
-                    f"Provider {self._provider_id} initializing detector: {detector_id}"
-                )
+            for detector_key, detector in self.detectors.items():
                 await detector.initialize()
-                logger.info(
-                    f"Provider {self._provider_id} initialized detector: {detector_id}"
-                )
 
             # Phase 2: Create and register shields
-            for detector_id, detector in self.detectors.items():
+            for detector_key, detector in self.detectors.items():
                 try:
+                    config_id = detector.config.detector_id  # Use config's detector_id
                     logger.info(
-                        f"Provider {self._provider_id} creating shield for detector: {detector_id}"
+                        f"Provider {self._provider_id} creating shield for detector: {config_id}"
                     )
-                    shield = await self._shield_store.get_shield(detector_id)
+                    shield = await self._shield_store.get_shield(config_id)
                     if not shield:
                         raise DetectorValidationError(
-                            f"Failed to create shield for detector: {detector_id}"
+                            f"Failed to create shield for detector: {config_id}"
                         )
 
                     # Register shield in both provider and store
-                    self._shields[detector_id] = shield
+                    self._shields[config_id] = shield
                     await detector.register_shield(shield)
 
                     # Ensure shield is in store's registry
                     store_shields = await self._shield_store.list_shields()
                     if shield not in store_shields.data:
-                        self._shield_store._shields[detector_id] = shield
+                        self._shield_store._shields[config_id] = shield
 
                     logger.info(
-                        f"Provider {self._provider_id} registered shield for detector: {detector_id}"
+                        f"Provider {self._provider_id} registered shield for detector: {config_id}"
                     )
 
                 except Exception as e:
                     logger.error(
-                        f"Provider {self._provider_id} failed to setup shield for detector {detector_id}: {e}"
+                        f"Provider {self._provider_id} failed to setup shield for detector {config_id}: {e}"
                     )
                     raise
 
