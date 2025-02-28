@@ -5,7 +5,7 @@ import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -363,25 +363,29 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
 
     def _process_detection(
         self, detection: Dict[str, Any]
-    ) -> Optional[DetectionResult]:
-        """Process detection result and validate against threshold"""
-        if not detection.get("score"):
-            logger.warning("Detection missing score field")
-            return None
+    ) -> Tuple[Optional[DetectionResult], float]:
+        """Process detection result and return both result and score"""
+        score = detection.get("score", 0.0)
 
-        score = detection.get("score", 0)
+        if not "score" in detection:
+            logger.warning("Detection missing score field")
+            return None, 0.0
+
         if score > self.score_threshold:
-            return DetectionResult(
-                detection="Yes",
-                detection_type=detection["detection_type"],
-                score=score,
-                detector_id=detection.get("detector_id", self.config.detector_id),
-                text=detection.get("text", ""),
-                start=detection.get("start", 0),
-                end=detection.get("end", 0),
-                metadata=detection.get("metadata"),
+            return (
+                DetectionResult(
+                    detection="Yes",
+                    detection_type=detection["detection_type"],
+                    score=score,
+                    detector_id=detection.get("detector_id", self.config.detector_id),
+                    text=detection.get("text", ""),
+                    start=detection.get("start", 0),
+                    end=detection.get("end", 0),
+                    metadata=detection.get("metadata"),
+                ),
+                score,
             )
-        return None
+        return None, score
 
     def create_violation_response(
         self,
@@ -447,6 +451,7 @@ class SimpleShieldStore(ShieldStore):
         self._detector_configs = {}
         self._store_id = id(self)
         self._initialized = False
+        self._lock = asyncio.Lock()  # Add lock
         logger.info(f"Created SimpleShieldStore: {self._store_id}")
 
     async def initialize(self) -> None:
@@ -456,12 +461,13 @@ class SimpleShieldStore(ShieldStore):
         self._initialized = True
         logger.info(f"Shield store {self._store_id} initialized")
 
-    def register_detector_config(self, detector_id: str, config: Any) -> None:
+    async def register_detector_config(self, detector_id: str, config: Any) -> None:
         """Register detector configuration"""
-        self._detector_configs[detector_id] = config
-        logger.info(
-            f"Shield store {self._store_id} registered config for: {detector_id}"
-        )
+        async with self._lock:
+            self._detector_configs[detector_id] = config
+            logger.info(
+                f"Shield store {self._store_id} registered config for: {detector_id}"
+            )
 
     async def get_shield(self, identifier: str) -> Shield:
         """Get or create shield by identifier"""
@@ -674,9 +680,6 @@ class DetectorProvider(Safety, Shields):
 
         return None
 
-        logger.debug(f"Provider {self._provider_id} shield not found: {identifier}")
-        return None
-
     async def register_shield(
         self,
         shield_id: str,
@@ -725,40 +728,116 @@ class DetectorProvider(Safety, Shields):
             await self.initialize()
 
         if not messages:
-            logger.debug(f"Provider {self._provider_id} no messages to process")
-            return RunShieldResponse(violation=None)
-
-        shield = await self.get_shield(shield_id)
-        if not shield:
-            raise DetectorValidationError(f"Shield not found: {shield_id}")
-
-        # Try each detector
-        for detector_id, detector in self.detectors.items():
-            try:
-                logger.debug(
-                    f"Provider {self._provider_id} running shield {shield_id} with detector {detector_id}"
+            return RunShieldResponse(
+                violation=SafetyViolation(
+                    violation_level=ViolationLevel.INFO,
+                    user_message="No messages to process",
+                    metadata={"status": "skipped", "shield_id": shield_id},
                 )
-                response = await detector.run_shield(shield_id, messages, params)
+            )
+
+        # Get all detectors for this shield
+        shield_detectors = [
+            detector
+            for detector in self.detectors.values()
+            if detector.config.detector_id == shield_id
+        ]
+
+        if not shield_detectors:
+            return RunShieldResponse(
+                violation=SafetyViolation(
+                    violation_level=ViolationLevel.ERROR,
+                    user_message=f"No detectors found for shield: {shield_id}",
+                    metadata={
+                        "status": "error",
+                        "error_type": "detectors_not_found",
+                        "shield_id": shield_id,
+                    },
+                )
+            )
+
+        try:
+            detector_results = []
+            has_violation = False
+
+            # Run all detectors and collect results
+            for detector in shield_detectors:
+                filtered_messages = detector._filter_messages(messages)
+                if not filtered_messages:
+                    continue
+
+                response = await detector.run_shield(
+                    shield_id, filtered_messages, params
+                )
+
+                result = {
+                    "detector_type": detector.__class__.__name__,
+                    "threshold": detector.score_threshold,
+                }
+
                 if response.violation:
-                    logger.info(
-                        f"Provider {self._provider_id} violation detected by detector {detector_id}"
+                    result.update(
+                        {
+                            "score": response.violation.metadata.get("score"),
+                            "detection_type": response.violation.metadata.get(
+                                "detection_type"
+                            ),
+                            "text": response.violation.metadata.get("text", ""),
+                            "start": response.violation.metadata.get("start", 0),
+                            "end": response.violation.metadata.get("end", 0),
+                        }
                     )
-                    return response
-            except Exception as e:
-                logger.error(
-                    f"Provider {self._provider_id} error running detector {detector_id}: {e}"
-                )
+
+                    if response.violation.violation_level == ViolationLevel.ERROR:
+                        has_violation = True
+                        result["status"] = "violation"
+                    else:
+                        result["status"] = "pass"
+                else:
+                    result["status"] = "pass"
+
+                detector_results.append(result)
+
+            # Construct final response
+            if has_violation:
                 return RunShieldResponse(
                     violation=SafetyViolation(
                         violation_level=ViolationLevel.ERROR,
-                        user_message=f"Detector error: {str(e)}",
+                        user_message="Content failed safety checks",
+                        metadata={
+                            "status": "violation",
+                            "shield_id": shield_id,
+                            "detectors": detector_results,
+                        },
+                    )
+                )
+            else:
+                return RunShieldResponse(
+                    violation=SafetyViolation(
+                        violation_level=ViolationLevel.INFO,
+                        user_message="Content passed safety checks",
+                        metadata={
+                            "status": "pass",
+                            "shield_id": shield_id,
+                            "detectors": detector_results,
+                        },
                     )
                 )
 
-        logger.debug(
-            f"Provider {self._provider_id} no violations found for shield {shield_id}"
-        )
-        return RunShieldResponse(violation=None)
+        except Exception as e:
+            logger.error(f"Provider {self._provider_id} shield execution failed: {e}")
+            return RunShieldResponse(
+                violation=SafetyViolation(
+                    violation_level=ViolationLevel.ERROR,
+                    user_message=f"Shield execution error: {str(e)}",
+                    metadata={
+                        "status": "error",
+                        "error_type": "execution_error",
+                        "shield_id": shield_id,
+                        "error": str(e),
+                    },
+                )
+            )
 
     async def shutdown(self) -> None:
         """Cleanup resources"""
