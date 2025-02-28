@@ -1,3 +1,4 @@
+from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Set, Union, Any
@@ -7,26 +8,28 @@ from llama_stack.schema_utils import json_schema_type
 
 
 def resolve_detector_config(
-    data: Dict[str, Any]
-) -> Union["ContentDetectorConfig", "ChatDetectorConfig"]:
+    data: Dict[str, Any], detector_id: str
+) -> Union[ContentDetectorConfig, ChatDetectorConfig]:
     """Resolve detector configuration from dictionary."""
     if isinstance(data, (ContentDetectorConfig, ChatDetectorConfig)):
         return data
 
+    # Use the detector key as the detector_id
+    data["detector_id"] = detector_id
+
     # Convert detector_params if present
     if "detector_params" in data and isinstance(data["detector_params"], dict):
         params = data["detector_params"]
-        if "detectors" in params:
-            # Handle orchestrator mode
-            data["detector_params"] = DetectorParams(detectors=params["detectors"])
-        else:
-            # Handle direct mode
-            data["detector_params"] = DetectorParams(**params)
+        data["detector_params"] = DetectorParams(
+            detectors=params.get("detectors"),
+            **{k: v for k, v in params.items() if k != "detectors"},
+        )
 
     # Determine detector type
-    if data.get("is_chat", False):
-        return ChatDetectorConfig(**data)
-    return ContentDetectorConfig(**data)
+    detector_type = data.pop("type", None)
+    is_chat = detector_type == "chat" if detector_type else data.pop("is_chat", False)
+
+    return ChatDetectorConfig(**data) if is_chat else ContentDetectorConfig(**data)
 
 
 class MessageType(Enum):
@@ -190,117 +193,115 @@ class ChatDetectorConfig(BaseDetectorConfig):
 @json_schema_type
 @dataclass
 class FMSSafetyProviderConfig:
-    """Configuration for the FMS Safety Provider organized by message types"""
+    """Configuration for the FMS Safety Provider organized by shields"""
 
-    detectors: Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]
+    shields: Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]
     orchestrator_base_url: Optional[str] = None
     use_orchestrator_api: bool = False
 
     def __post_init__(self):
-        """Convert detector dictionaries to proper config objects and validate"""
-        # Convert dictionary detectors to config objects
-        if isinstance(self.detectors, dict):
-            converted_detectors = {}
-            for k, v in self.detectors.items():
-                if isinstance(v, dict):
-                    # Ensure detector_id is set
-                    if "detector_id" not in v:
-                        v["detector_id"] = k
-                    converted_detectors[k] = resolve_detector_config(v)
+        """Convert shield configurations to proper config objects and validate"""
+        if isinstance(self.shields, dict):
+            converted_shields = {}
+            for shield_id, shield_config in self.shields.items():
+                if isinstance(shield_config, dict):
+                    converted_shields[shield_id] = resolve_detector_config(
+                        shield_config, shield_id
+                    )
                 else:
-                    converted_detectors[k] = v
-            self.detectors = converted_detectors
+                    converted_shields[shield_id] = shield_config
+            self.shields = converted_shields
 
         # Run validations
         self.validate_mixed_api_usage()
         self.validate_orchestrator_config()
         self.propagate_orchestrator_settings()
 
-        # Validate all detector configs
-        for detector in self.all_detectors.values():
-            detector.validate()
+        # Validate all shields
+        for shield in self.all_detectors.values():
+            shield.validate()
 
     def get_detectors_by_type(
         self, message_type: Union[str, MessageType]
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
-        """Get detectors configured for a specific message type"""
+        """Get shields configured for a specific message type"""
         type_value = (
             message_type.value
             if isinstance(message_type, MessageType)
             else message_type
         )
         return {
-            detector_id: detector
-            for detector_id, detector in self.detectors.items()
-            if type_value in detector.message_types
+            shield_id: shield
+            for shield_id, shield in self.shields.items()
+            if type_value in shield.message_types
         }
 
     @property
     def all_detectors(
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
-        """Get all detectors"""
-        return self.detectors
+        """Get all shields"""
+        return self.shields
 
     @property
     def user_message_detectors(
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
-        """Get detectors configured for user messages"""
+        """Get shields configured for user messages"""
         return self.get_detectors_by_type(MessageType.USER)
 
     @property
     def system_message_detectors(
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
-        """Get detectors configured for system messages"""
+        """Get shields configured for system messages"""
         return self.get_detectors_by_type(MessageType.SYSTEM)
 
     @property
     def tool_response_detectors(
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
-        """Get detectors configured for tool responses"""
+        """Get shields configured for tool responses"""
         return self.get_detectors_by_type(MessageType.TOOL)
 
     @property
     def completion_message_detectors(
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
-        """Get detectors configured for completion messages"""
+        """Get shields configured for completion messages"""
         return self.get_detectors_by_type(MessageType.COMPLETION)
 
-    def _update_detector_settings(self, detector: BaseDetectorConfig) -> None:
-        """Update detector settings with orchestrator configuration"""
-        detector.use_orchestrator_api = True
-        detector.orchestrator_base_url = self.orchestrator_base_url
+    def _update_detector_settings(self, shield: BaseDetectorConfig) -> None:
+        """Update shield settings with orchestrator configuration"""
+        shield.use_orchestrator_api = True
+        shield.orchestrator_base_url = self.orchestrator_base_url
 
     def propagate_orchestrator_settings(self) -> None:
-        """Propagate orchestrator settings to all detectors"""
+        """Propagate orchestrator settings to all shields"""
         if self.use_orchestrator_api:
-            for detector in self.all_detectors.values():
-                self._update_detector_settings(detector)
+            for shield in self.all_detectors.values():
+                self._update_detector_settings(shield)
 
     def validate_mixed_api_usage(self):
-        """Check for mixed API usage across all detector types"""
-        mixed_api_detectors = {
-            detector_id: detector.use_orchestrator_api
-            for detector_id, detector in self.all_detectors.items()
+        """Check for mixed API usage across all shield types"""
+        mixed_api_shields = {
+            shield_id: shield.use_orchestrator_api
+            for shield_id, shield in self.shields.items()
         }
 
-        orchestrator_detectors = [
-            d_id for d_id, uses_orch in mixed_api_detectors.items() if uses_orch
+        orchestrator_shields = [
+            s_id for s_id, uses_orch in mixed_api_shields.items() if uses_orch
         ]
-        direct_detectors = [
-            d_id for d_id, uses_orch in mixed_api_detectors.items() if not uses_orch
+        direct_shields = [
+            s_id for s_id, uses_orch in mixed_api_shields.items() if not uses_orch
         ]
 
-        if orchestrator_detectors and direct_detectors:
+        if orchestrator_shields and direct_shields:
             raise ValueError(
-                "Mixed API usage detected. All detectors must use either direct or orchestrator API:\n"
-                f"- Orchestrator API detectors: {orchestrator_detectors}\n"
-                f"- Direct API detectors: {direct_detectors}\n"
-                "Please configure all detectors consistently."
+                "Mixed API usage detected. All shields must use either direct or orchestrator API:\n"
+                f"- Orchestrator API shields: {orchestrator_shields}\n"
+                f"- Direct API shields: {direct_shields}\n"
+                "Please configure all shields consistently."
             )
 
     def validate_orchestrator_config(self):
@@ -311,14 +312,14 @@ class FMSSafetyProviderConfig:
                     "orchestrator_base_url is required when use_orchestrator_api is True"
                 )
 
-            invalid_detectors = [
-                detector_id
-                for detector_id, detector in self.all_detectors.items()
-                if detector.base_url is not None
+            invalid_shields = [
+                shield_id
+                for shield_id, shield in self.shields.items()
+                if shield.base_url is not None
             ]
 
-            if invalid_detectors:
+            if invalid_shields:
                 raise ValueError(
-                    f"When using orchestrator API, base_url should not be specified for detectors: {invalid_detectors}. "
+                    f"When using orchestrator API, base_url should not be specified for shields: {invalid_shields}. "
                     "All requests will be routed through the orchestrator_base_url."
                 )

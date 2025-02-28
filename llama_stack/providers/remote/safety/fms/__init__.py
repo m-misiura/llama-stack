@@ -68,17 +68,18 @@ async def get_adapter_impl(
 
         detectors: Dict[str, DetectorType] = {}
 
-        for detector_id, detector_config in provider_config.detectors.items():
-            if isinstance(detector_config, ChatDetectorConfig):
-                impl = ChatDetector(detector_config)
-            elif isinstance(detector_config, ContentDetectorConfig):
-                impl = ContentDetector(detector_config)
+        # Changed from provider_config.detectors to provider_config.shields
+        for shield_id, shield_config in provider_config.shields.items():
+            if isinstance(shield_config, ChatDetectorConfig):
+                impl = ChatDetector(shield_config)
+            elif isinstance(shield_config, ContentDetectorConfig):
+                impl = ContentDetector(shield_config)
             else:
                 raise DetectorConfigError(
-                    f"Invalid detector config type for {detector_id}: {type(detector_config)}"
+                    f"Invalid shield config type for {shield_id}: {type(shield_config)}"
                 )
             await impl.initialize()
-            detectors[detector_id] = impl
+            detectors[shield_id] = impl
 
         return DetectorProvider(detectors)
 
