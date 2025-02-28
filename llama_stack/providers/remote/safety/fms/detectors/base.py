@@ -736,7 +736,6 @@ class DetectorProvider(Safety, Shields):
                 )
             )
 
-        # Get all detectors for this shield
         shield_detectors = [
             detector
             for detector in self.detectors.values()
@@ -757,72 +756,80 @@ class DetectorProvider(Safety, Shields):
             )
 
         try:
-            detector_results = []
+            message_results = {}
             has_violation = False
+            violation_details = None
 
-            # Run all detectors and collect results
-            for detector in shield_detectors:
-                filtered_messages = detector._filter_messages(messages)
-                if not filtered_messages:
-                    continue
-
-                response = await detector.run_shield(
-                    shield_id, filtered_messages, params
-                )
-
-                result = {
-                    "detector_type": detector.__class__.__name__,
-                    "threshold": detector.score_threshold,
+            # Process each message individually
+            for idx, message in enumerate(messages):
+                current_result = {
+                    "detector_type": shield_detectors[0].__class__.__name__,
+                    "threshold": shield_detectors[0].score_threshold,
+                    "status": "pass",
+                    "score": None,
+                    "detection_type": "none",
+                    "text": message.content,
+                    "start": 0,
+                    "end": len(message.content),
                 }
 
-                if response.violation:
-                    result.update(
-                        {
-                            "score": response.violation.metadata.get("score"),
-                            "detection_type": response.violation.metadata.get(
+                # Run each detector on the current message
+                for detector in shield_detectors:
+                    if not detector._should_process_message(message):
+                        continue
+
+                    response = await detector.run_shield(shield_id, [message], params)
+
+                    if response.violation:
+                        # Add violation-specific fields to result
+                        violation_data = response.violation.metadata
+                        # Update fields with actual violation data
+                        if violation_data.get("score"):
+                            current_result["score"] = violation_data["score"]
+                        if violation_data.get("detection_type"):
+                            current_result["detection_type"] = violation_data[
                                 "detection_type"
-                            ),
-                            "text": response.violation.metadata.get("text", ""),
-                            "start": response.violation.metadata.get("start", 0),
-                            "end": response.violation.metadata.get("end", 0),
-                        }
-                    )
+                            ]
+                        if violation_data.get("text"):
+                            current_result.update(
+                                {
+                                    "text": violation_data["text"],
+                                    "start": violation_data.get("start", 0),
+                                    "end": violation_data.get(
+                                        "end", len(violation_data["text"])
+                                    ),
+                                }
+                            )
 
-                    if response.violation.violation_level == ViolationLevel.ERROR:
-                        has_violation = True
-                        result["status"] = "violation"
-                    else:
-                        result["status"] = "pass"
-                else:
-                    result["status"] = "pass"
+                        if response.violation.violation_level == ViolationLevel.ERROR:
+                            current_result["status"] = "violation"
+                            has_violation = True
+                            violation_details = current_result
+                            break
+                # Always store result for message
+                message_results[f"message_{idx}"] = current_result
 
-                detector_results.append(result)
+            # Construct final response with cleaner metadata
+            metadata = {
+                "status": "violation" if has_violation else "pass",
+                "shield_id": shield_id,
+                "results": message_results,  # Single source of detection results
+            }
 
-            # Construct final response
-            if has_violation:
-                return RunShieldResponse(
-                    violation=SafetyViolation(
-                        violation_level=ViolationLevel.ERROR,
-                        user_message="Content failed safety checks",
-                        metadata={
-                            "status": "violation",
-                            "shield_id": shield_id,
-                            "detectors": detector_results,
-                        },
-                    )
+            return RunShieldResponse(
+                violation=SafetyViolation(
+                    violation_level=(
+                        ViolationLevel.ERROR if has_violation else ViolationLevel.INFO
+                    ),
+                    user_message=(
+                        f"Content violation detected: {violation_details['detection_type']} "
+                        f"(confidence: {violation_details['score']:.2f})"
+                        if has_violation
+                        else f"Content verified by {shield_id} shield"
+                    ),
+                    metadata=metadata,
                 )
-            else:
-                return RunShieldResponse(
-                    violation=SafetyViolation(
-                        violation_level=ViolationLevel.INFO,
-                        user_message="Content passed safety checks",
-                        metadata={
-                            "status": "pass",
-                            "shield_id": shield_id,
-                            "detectors": detector_results,
-                        },
-                    )
-                )
+            )
 
         except Exception as e:
             logger.error(f"Provider {self._provider_id} shield execution failed: {e}")
