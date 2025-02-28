@@ -21,9 +21,9 @@ providers:
     config:
       orchestrator_base_url: ${env.FMS_ORCHESTRATOR_URL}
       use_orchestrator_api: true
-      detectors:
-        content:
-          detector_id: content
+      shields:
+        email_hap:
+          type: content
           confidence_threshold: 0.5
           message_types: ["user", "system"]
           detector_params:

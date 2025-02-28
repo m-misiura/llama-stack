@@ -19,12 +19,10 @@ providers:
     - provider_id: fms-safety
       provider_type: remote::fms
       config:
-        detectors:
+        shields:
           regex:
-            detector_id: regex
+            type: content
             base_url: ${env.FMS_REGEX_URL}
-            is_chat: false
-            use_orchestrator_api: false
             confidence_threshold: 0.5
             detector_params:
               regex: ["email"]
