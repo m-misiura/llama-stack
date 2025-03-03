@@ -796,6 +796,7 @@ class DetectorProvider(Safety, Shields):
             message_results = []
             has_violation = False
             highest_violation_score = 0.0
+            total_detections = 0
             violation_details = None
 
             for idx, message in enumerate(messages):
@@ -842,6 +843,7 @@ class DetectorProvider(Safety, Shields):
                         individual_results = []
                         message_has_violation = False
                         message_highest_score = 0.0
+                        message_detections = 0
 
                         for det_id in configured_detectors:
                             detection = next(
@@ -860,6 +862,7 @@ class DetectorProvider(Safety, Shields):
 
                             if is_violation:
                                 message_has_violation = True
+                                message_detections += 1
                                 if score > message_highest_score:
                                     message_highest_score = score
                                     current_result.update(
@@ -888,6 +891,7 @@ class DetectorProvider(Safety, Shields):
                         current_result["individual_detector_results"] = (
                             individual_results
                         )
+                        total_detections += message_detections
 
                         if message_has_violation:
                             has_violation = True
@@ -917,6 +921,7 @@ class DetectorProvider(Safety, Shields):
                     response = await detector.run_shield(shield_id, [message], params)
                     if response.violation:
                         has_violation = True
+                        total_detections += 1
                         score = response.violation.metadata.get("score")
                         if score and score > highest_violation_score:
                             highest_violation_score = score
@@ -933,28 +938,56 @@ class DetectorProvider(Safety, Shields):
 
                 message_results.append(current_result)
 
+            # Calculate summary statistics
+            total_messages = len(messages)
+            violated_messages = sum(
+                1 for r in message_results if r["status"] == "violation"
+            )
+            passed_messages = total_messages - violated_messages
+
+            # Calculate rates with proper rounding
+            message_pass_rate = round(
+                passed_messages / total_messages if total_messages > 0 else 0, 3
+            )
+            message_fail_rate = round(
+                violated_messages / total_messages if total_messages > 0 else 0, 3
+            )
+
+            # Prepare summary
+            summary = {
+                "total_messages": total_messages,
+                "messages_with_violations": violated_messages,
+                "messages_passed": passed_messages,
+                "message_fail_rate": message_fail_rate,
+                "message_pass_rate": message_pass_rate,
+                "total_detections": total_detections,
+                "detector_breakdown": {
+                    "active_detectors": (
+                        len(detector.config.detector_params.detectors)
+                        if is_composite
+                        else 1
+                    ),
+                    "total_checks_performed": (
+                        total_messages * len(detector.config.detector_params.detectors)
+                        if is_composite
+                        else total_messages
+                    ),
+                    "total_violations_found": total_detections,
+                    "violations_per_message": round(
+                        total_detections / total_messages if total_messages > 0 else 0,
+                        3,
+                    ),
+                },
+            }
+
             # Prepare metadata
             metadata = {
                 "status": "violation" if has_violation else "pass",
                 "shield_id": shield_id,
                 "confidence_threshold": detector.score_threshold,
+                "summary": summary,
                 "results": message_results,
             }
-
-            if is_composite:
-                metadata.update(
-                    {
-                        "detector_count": len(
-                            detector.config.detector_params.detectors
-                        ),
-                        "detector_names": list(
-                            detector.config.detector_params.detectors.keys()
-                        ),
-                        "number_of_violations_detected": sum(
-                            1 for r in message_results if r["status"] == "violation"
-                        ),
-                    }
-                )
 
             return RunShieldResponse(
                 violation=SafetyViolation(
@@ -963,9 +996,11 @@ class DetectorProvider(Safety, Shields):
                     ),
                     user_message=(
                         f"Content violation detected by shield {shield_id} "
-                        f"(confidence: {highest_violation_score:.2f})"
+                        f"(confidence: {highest_violation_score:.2f}, "
+                        f"{violated_messages}/{total_messages} messages violated)"
                         if has_violation
-                        else f"Content verified by shield {shield_id}"
+                        else f"Content verified by shield {shield_id} "
+                        f"({total_messages} messages checked)"
                     ),
                     metadata=metadata,
                 )
