@@ -753,53 +753,50 @@ class DetectorProvider(Safety, Shields):
         params: Optional[Dict[str, Any]] = None,
     ) -> RunShieldResponse:
         """Run shield against messages with enhanced composite handling"""
-        if not self._initialized:
-            await self.initialize()
-
-        if not messages:
-            return RunShieldResponse(
-                violation=SafetyViolation(
-                    violation_level=ViolationLevel.INFO,
-                    user_message="No messages to process",
-                    metadata={"status": "skipped", "shield_id": shield_id},
-                )
-            )
-
-        # Get detectors and validate configuration
-        shield = await self._shield_store.get_shield(shield_id)
-        shield_detectors = [
-            detector
-            for detector in self.detectors.values()
-            if detector.config.detector_id == shield_id
-        ]
-
-        if not shield_detectors:
-            return RunShieldResponse(
-                violation=SafetyViolation(
-                    violation_level=ViolationLevel.ERROR,
-                    user_message=f"No detectors found for shield: {shield_id}",
-                    metadata={
-                        "status": "error",
-                        "error_type": "detectors_not_found",
-                        "shield_id": shield_id,
-                    },
-                )
-            )
-
         try:
-            # Get primary detector for configuration info
-            detector = shield_detectors[0]
+            if not self._initialized:
+                await self.initialize()
 
-            # Check if this is a composite shield
+            if not messages:
+                return RunShieldResponse(
+                    violation=SafetyViolation(
+                        violation_level=ViolationLevel.INFO,
+                        user_message="No messages to process",
+                        metadata={"status": "skipped", "shield_id": shield_id},
+                    )
+                )
+
+            # Get detectors and validate configuration
+            shield = await self._shield_store.get_shield(shield_id)
+            shield_detectors = [
+                detector
+                for detector in self.detectors.values()
+                if detector.config.detector_id == shield_id
+            ]
+
+            if not shield_detectors:
+                return RunShieldResponse(
+                    violation=SafetyViolation(
+                        violation_level=ViolationLevel.ERROR,
+                        user_message=f"No detectors found for shield: {shield_id}",
+                        metadata={
+                            "status": "error",
+                            "error_type": "detectors_not_found",
+                            "shield_id": shield_id,
+                        },
+                    )
+                )
+
+            detector = shield_detectors[0]
             is_composite = (
                 hasattr(detector.config.detector_params, "detectors")
                 and detector.config.detector_params.detectors is not None
             )
 
-            # Process messages
             message_results = []
             has_violation = False
-            worst_violation = None
+            highest_violation_score = 0.0
+            violation_details = None
 
             for idx, message in enumerate(messages):
                 if not detector._should_process_message(message):
@@ -825,41 +822,28 @@ class DetectorProvider(Safety, Shields):
                         )
                     )
 
-                # Initialize result structure
                 current_result = {
                     "message_index": idx,
-                    "detector_type": detector.__class__.__name__,
-                    "threshold": detector.score_threshold,
+                    "text": message.content,
                     "status": "pass",
                     "score": None,
-                    "detection_type": "none",
-                    "text": message.content,
-                    "start": 0,
-                    "end": len(message.content),
+                    "detection_type": None,
                 }
 
                 if is_composite:
-                    # Make direct request to orchestrator for composite shield
                     request = detector._prepare_request_payload([message], params)
                     try:
-                        orch_response = await detector._make_request(request)
-                        detections = orch_response.get("detections", [])
-
-                        # Get configured detector IDs
+                        response = await detector._make_request(request)
+                        detections = response.get("detections", [])
                         configured_detectors = list(
                             detector.config.detector_params.detectors.keys()
                         )
 
-                        # Process each configured detector
                         individual_results = []
-                        highest_score = 0.0
-                        lowest_score = float("inf")
-                        highest_score_detector = None
-                        lowest_score_detector = None
-                        found_violation = False
+                        message_has_violation = False
+                        message_highest_score = 0.0
 
                         for det_id in configured_detectors:
-                            # Find detection for this detector
                             detection = next(
                                 (
                                     d
@@ -869,81 +853,50 @@ class DetectorProvider(Safety, Shields):
                                 None,
                             )
 
-                            score = detection.get("score", 0.0) if detection else 0.0
-                            is_violation = score > detector.score_threshold
+                            score = detection.get("score") if detection else None
+                            is_violation = (
+                                score is not None and score > detector.score_threshold
+                            )
 
-                            result = {
-                                "detector_id": det_id,
-                                "status": "violation" if is_violation else "pass",
-                                "score": score,
-                                "detection_type": (
-                                    detection.get("detection_type", "none")
-                                    if detection
-                                    else "none"
-                                ),
-                            }
-
-                            # Track scores
-                            if score > highest_score:
-                                highest_score = score
-                                highest_score_detector = {
-                                    "id": det_id,
-                                    "detection_type": result["detection_type"],
-                                }
-                            if score < lowest_score:
-                                lowest_score = score
-                                lowest_score_detector = {
-                                    "id": det_id,
-                                    "detection_type": result["detection_type"],
-                                }
                             if is_violation:
-                                found_violation = True
+                                message_has_violation = True
+                                if score > message_highest_score:
+                                    message_highest_score = score
+                                    current_result.update(
+                                        {
+                                            "status": "violation",
+                                            "score": score,
+                                            "detection_type": detection.get(
+                                                "detection_type"
+                                            ),
+                                        }
+                                    )
 
-                            individual_results.append(result)
+                            individual_results.append(
+                                {
+                                    "detector_id": det_id,
+                                    "status": "violation" if is_violation else "pass",
+                                    "score": score,
+                                    "detection_type": (
+                                        detection.get("detection_type")
+                                        if detection
+                                        else None
+                                    ),
+                                }
+                            )
 
-                        # Update result with individual detector results
                         current_result["individual_detector_results"] = (
                             individual_results
                         )
-                        current_result["shield_composition"] = {
-                            "is_composite": True,
-                            "detector_count": len(configured_detectors),
-                            "highest_score": highest_score,
-                            "highest_score_detector_id": (
-                                highest_score_detector["id"]
-                                if highest_score_detector
-                                else None
-                            ),
-                            "highest_score_detection_type": (
-                                highest_score_detector["detection_type"]
-                                if highest_score_detector
-                                else None
-                            ),
-                            "lowest_score": (
-                                lowest_score if lowest_score != float("inf") else 0.0
-                            ),
-                            "lowest_score_detector_id": (
-                                lowest_score_detector["id"]
-                                if lowest_score_detector
-                                else None
-                            ),
-                            "lowest_score_detection_type": (
-                                lowest_score_detector["detection_type"]
-                                if lowest_score_detector
-                                else None
-                            ),
-                            "violation_found": found_violation,
-                        }
 
-                        if found_violation:
+                        if message_has_violation:
                             has_violation = True
-                            current_result["status"] = "violation"
-                            current_result["score"] = highest_score
-                            if (
-                                not worst_violation
-                                or highest_score > worst_violation.get("score", 0)
-                            ):
-                                worst_violation = current_result
+                            if message_highest_score > highest_violation_score:
+                                highest_violation_score = message_highest_score
+                                violation_details = {
+                                    "message_index": idx,
+                                    "score": message_highest_score,
+                                }
 
                     except Exception as e:
                         logger.error(f"Orchestrator request failed: {e}")
@@ -961,38 +914,47 @@ class DetectorProvider(Safety, Shields):
                         )
 
                 else:
-                    # Single detector case - use existing implementation
                     response = await detector.run_shield(shield_id, [message], params)
-                    metadata = response.violation.metadata if response.violation else {}
-
-                    result = {
-                        "detector_id": detector.config.detector_id,
-                        "status": "violation" if response.violation else "pass",
-                        "score": metadata.get("score", 0.0),
-                        "detection_type": metadata.get("detection_type", "none"),
-                    }
-
-                    current_result["individual_detector_results"] = [result]
                     if response.violation:
                         has_violation = True
-                        current_result["status"] = "violation"
-                        current_result["score"] = metadata.get("score", 0.0)
-                        if not worst_violation or current_result[
-                            "score"
-                        ] > worst_violation.get("score", 0):
-                            worst_violation = current_result
+                        score = response.violation.metadata.get("score")
+                        if score and score > highest_violation_score:
+                            highest_violation_score = score
+                            violation_details = {"message_index": idx, "score": score}
+                        current_result.update(
+                            {
+                                "status": "violation",
+                                "score": score,
+                                "detection_type": response.violation.metadata.get(
+                                    "detection_type"
+                                ),
+                            }
+                        )
 
                 message_results.append(current_result)
 
-            # Construct final response
-            shield_type = "composite" if is_composite else "single"
+            # Prepare metadata
             metadata = {
                 "status": "violation" if has_violation else "pass",
                 "shield_id": shield_id,
-                "shield_type": shield_type,
                 "confidence_threshold": detector.score_threshold,
                 "results": message_results,
             }
+
+            if is_composite:
+                metadata.update(
+                    {
+                        "detector_count": len(
+                            detector.config.detector_params.detectors
+                        ),
+                        "detector_names": list(
+                            detector.config.detector_params.detectors.keys()
+                        ),
+                        "number_of_violations_detected": sum(
+                            1 for r in message_results if r["status"] == "violation"
+                        ),
+                    }
+                )
 
             return RunShieldResponse(
                 violation=SafetyViolation(
@@ -1000,10 +962,10 @@ class DetectorProvider(Safety, Shields):
                         ViolationLevel.ERROR if has_violation else ViolationLevel.INFO
                     ),
                     user_message=(
-                        f"Content violation detected by {shield_type} shield {shield_id} "
-                        f"(confidence: {worst_violation['score']:.2f})"
+                        f"Content violation detected by shield {shield_id} "
+                        f"(confidence: {highest_violation_score:.2f})"
                         if has_violation
-                        else f"Content verified by {shield_type} shield {shield_id}"
+                        else f"Content verified by shield {shield_id}"
                     ),
                     metadata=metadata,
                 )
