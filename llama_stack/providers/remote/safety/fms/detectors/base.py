@@ -818,13 +818,14 @@ class DetectorProvider(Safety, Shields):
                 )
 
             # Process messages that passed validation
-            message_results = {}
+            message_results = []
             has_violation = False
             violation_details = None
 
             # Process each message individually
             for idx, message in enumerate(messages):
                 current_result = {
+                    "message_index": idx,
                     "detector_type": detector.__class__.__name__,
                     "threshold": detector.score_threshold,
                     "status": "pass",
@@ -866,7 +867,7 @@ class DetectorProvider(Safety, Shields):
                             break
 
                 # Store result for current message
-                message_results[f"message_{idx}"] = current_result
+                message_results.append(current_result)
 
                 # Stop processing if violation found
                 if has_violation:
