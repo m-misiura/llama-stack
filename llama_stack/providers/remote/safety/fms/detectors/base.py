@@ -754,6 +754,7 @@ class DetectorProvider(Safety, Shields):
     ) -> RunShieldResponse:
         """Run shield against messages with enhanced composite handling"""
         try:
+            # Step 1: Initial validation and initialization
             if not self._initialized:
                 await self.initialize()
 
@@ -766,7 +767,7 @@ class DetectorProvider(Safety, Shields):
                     )
                 )
 
-            # Get detectors and validate configuration
+            # Step 2: Get and validate shield configuration
             shield = await self._shield_store.get_shield(shield_id)
             shield_detectors = [
                 detector
@@ -788,52 +789,68 @@ class DetectorProvider(Safety, Shields):
                 )
 
             detector = shield_detectors[0]
+
+            # Step 3: Filter messages and track skipped ones
+            skipped_messages = []
+            filtered_messages = []
+
+            for idx, msg in enumerate(messages):
+                if detector._should_process_message(msg):
+                    filtered_messages.append((idx, msg))
+                else:
+                    msg_type = msg.type if hasattr(msg, "type") else type(msg).__name__
+                    skipped_messages.append(
+                        {
+                            "index": idx,
+                            "type": msg_type,
+                            "reason": f"Message type '{msg_type}' not supported",
+                        }
+                    )
+
+            if not filtered_messages:
+                return RunShieldResponse(
+                    violation=SafetyViolation(
+                        violation_level=ViolationLevel.WARNING,
+                        user_message=(
+                            f"No supported message types to process. Shield {shield_id} only handles: "
+                            f"{list(detector.config.message_types)}"
+                        ),
+                        metadata={
+                            "status": "skipped",
+                            "error_type": "no_supported_messages",
+                            "supported_types": list(detector.config.message_types),
+                            "shield_id": shield_id,
+                            "skipped_messages": skipped_messages,
+                        },
+                    )
+                )
+
+            # Step 4: Initialize result tracking
+            message_results = []
+            has_violation = False
+            highest_violation_score = 0.0
+            total_detections = 0
+
+            # Step 5: Determine if detector is composite
             is_composite = (
                 hasattr(detector.config.detector_params, "detectors")
                 and detector.config.detector_params.detectors is not None
             )
 
-            message_results = []
-            has_violation = False
-            highest_violation_score = 0.0
-            total_detections = 0
-            violation_details = None
-
-            for idx, message in enumerate(messages):
-                if not detector._should_process_message(message):
-                    msg_type = (
-                        message.type
-                        if hasattr(message, "type")
-                        else type(message).__name__
-                    )
-                    return RunShieldResponse(
-                        violation=SafetyViolation(
-                            violation_level=ViolationLevel.ERROR,
-                            user_message=(
-                                f"Message type '{msg_type}' not supported. "
-                                f"Shield {shield_id} only handles: {list(detector.config.message_types)}"
-                            ),
-                            metadata={
-                                "status": "error",
-                                "error_type": "unsupported_message_type",
-                                "message_type": msg_type,
-                                "supported_types": list(detector.config.message_types),
-                                "shield_id": shield_id,
-                            },
-                        )
-                    )
-
+            # Step 6: Process each message
+            for idx, (orig_idx, message) in enumerate(filtered_messages):
                 current_result = {
-                    "message_index": idx,
+                    "message_index": orig_idx,
                     "text": message.content,
                     "status": "pass",
                     "score": None,
                     "detection_type": None,
                 }
 
-                if is_composite:
-                    request = detector._prepare_request_payload([message], params)
-                    try:
+                try:
+                    if is_composite:
+                        # Step 6a: Handle composite detector
+                        request = detector._prepare_request_payload([message], params)
                         response = await detector._make_request(request)
                         detections = response.get("detections", [])
                         configured_detectors = list(
@@ -897,65 +914,66 @@ class DetectorProvider(Safety, Shields):
                             has_violation = True
                             if message_highest_score > highest_violation_score:
                                 highest_violation_score = message_highest_score
-                                violation_details = {
-                                    "message_index": idx,
-                                    "score": message_highest_score,
+
+                    else:
+                        # Step 6b: Handle non-composite detector
+                        response = await detector._run_shield_impl(
+                            shield_id, [message], params
+                        )
+                        if response.violation:
+                            has_violation = True
+                            total_detections += 1
+                            score = response.violation.metadata.get("score")
+                            if score and score > highest_violation_score:
+                                highest_violation_score = score
+                            current_result.update(
+                                {
+                                    "status": "violation",
+                                    "score": score,
+                                    "detection_type": response.violation.metadata.get(
+                                        "detection_type"
+                                    ),
                                 }
-
-                    except Exception as e:
-                        logger.error(f"Orchestrator request failed: {e}")
-                        return RunShieldResponse(
-                            violation=SafetyViolation(
-                                violation_level=ViolationLevel.ERROR,
-                                user_message=f"Orchestrator request failed: {str(e)}",
-                                metadata={
-                                    "status": "error",
-                                    "error_type": "orchestrator_error",
-                                    "shield_id": shield_id,
-                                    "error": str(e),
-                                },
                             )
+
+                    message_results.append(current_result)
+
+                except Exception as e:
+                    logger.error(f"Message processing failed: {e}")
+                    return RunShieldResponse(
+                        violation=SafetyViolation(
+                            violation_level=ViolationLevel.ERROR,
+                            user_message=f"Message processing failed: {str(e)}",
+                            metadata={
+                                "status": "error",
+                                "error_type": "processing_error",
+                                "shield_id": shield_id,
+                                "error": str(e),
+                            },
                         )
+                    )
 
-                else:
-                    response = await detector.run_shield(shield_id, [message], params)
-                    if response.violation:
-                        has_violation = True
-                        total_detections += 1
-                        score = response.violation.metadata.get("score")
-                        if score and score > highest_violation_score:
-                            highest_violation_score = score
-                            violation_details = {"message_index": idx, "score": score}
-                        current_result.update(
-                            {
-                                "status": "violation",
-                                "score": score,
-                                "detection_type": response.violation.metadata.get(
-                                    "detection_type"
-                                ),
-                            }
-                        )
-
-                message_results.append(current_result)
-
-            # Calculate summary statistics
-            total_messages = len(messages)
+            # Step 7: Calculate summary statistics
+            total_filtered = len(filtered_messages)
             violated_messages = sum(
                 1 for r in message_results if r["status"] == "violation"
             )
-            passed_messages = total_messages - violated_messages
+            passed_messages = total_filtered - violated_messages
 
-            # Calculate rates with proper rounding
             message_pass_rate = round(
-                passed_messages / total_messages if total_messages > 0 else 0, 3
+                passed_messages / total_filtered if total_filtered > 0 else 0,
+                3,
             )
             message_fail_rate = round(
-                violated_messages / total_messages if total_messages > 0 else 0, 3
+                violated_messages / total_filtered if total_filtered > 0 else 0,
+                3,
             )
 
-            # Prepare summary
+            # Step 8: Prepare summary
             summary = {
-                "total_messages": total_messages,
+                "total_messages": len(messages),
+                "processed_messages": total_filtered,
+                "skipped_messages": len(skipped_messages),
                 "messages_with_violations": violated_messages,
                 "messages_passed": passed_messages,
                 "message_fail_rate": message_fail_rate,
@@ -968,19 +986,19 @@ class DetectorProvider(Safety, Shields):
                         else 1
                     ),
                     "total_checks_performed": (
-                        total_messages * len(detector.config.detector_params.detectors)
+                        total_filtered * len(detector.config.detector_params.detectors)
                         if is_composite
-                        else total_messages
+                        else total_filtered
                     ),
                     "total_violations_found": total_detections,
                     "violations_per_message": round(
-                        total_detections / total_messages if total_messages > 0 else 0,
+                        total_detections / total_filtered if total_filtered > 0 else 0,
                         3,
                     ),
                 },
             }
 
-            # Prepare metadata
+            # Step 9: Prepare metadata
             metadata = {
                 "status": "violation" if has_violation else "pass",
                 "shield_id": shield_id,
@@ -989,19 +1007,28 @@ class DetectorProvider(Safety, Shields):
                 "results": message_results,
             }
 
+            # Step 10: Prepare response message
+            skipped_msg = (
+                f" ({len(skipped_messages)} messages skipped)"
+                if skipped_messages
+                else ""
+            )
+            base_msg = (
+                f"Content violation detected by shield {shield_id} "
+                f"(confidence: {highest_violation_score:.2f}, "
+                f"{violated_messages}/{total_filtered} processed messages violated)"
+                if has_violation
+                else f"Content verified by shield {shield_id} "
+                f"({total_filtered} messages processed)"
+            )
+
+            # Step 11: Return final response
             return RunShieldResponse(
                 violation=SafetyViolation(
                     violation_level=(
                         ViolationLevel.ERROR if has_violation else ViolationLevel.INFO
                     ),
-                    user_message=(
-                        f"Content violation detected by shield {shield_id} "
-                        f"(confidence: {highest_violation_score:.2f}, "
-                        f"{violated_messages}/{total_messages} messages violated)"
-                        if has_violation
-                        else f"Content verified by shield {shield_id} "
-                        f"({total_messages} messages checked)"
-                    ),
+                    user_message=f"{base_msg}{skipped_msg}",
                     metadata=metadata,
                 )
             )
