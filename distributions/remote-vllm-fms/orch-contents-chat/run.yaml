@@ -25,7 +25,7 @@ providers:
           email_hap:
             type: content
             confidence_threshold: 0.5
-            message_types: ["user", "system"]
+            message_types: ["system"]
             detector_params:
               detectors:
                 hap: {}

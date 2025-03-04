@@ -14,12 +14,12 @@ cmd = "curl -s http://localhost:5001/v1/shields | jq '.'"
 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 print(result.stdout)
 
-# %% Hit up the content shield with a system message
-## expect to get a violation from a regex detector; no violation from a hap detector
+# %% Hit up the regex content shield with a system message
+## expect to get a violation from a regex detector
 cmd = """curl -X POST http://localhost:5001/v1/safety/run-shield \
 -H "Content-Type: application/json" \
 -d '{
-  "shield_id": "email_hap",
+  "shield_id": "regex",
   "messages": [
     {
       "content": "My email is test@example.com",
@@ -31,6 +31,61 @@ cmd = """curl -X POST http://localhost:5001/v1/safety/run-shield \
 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
 print(result.stdout)
 
+# %% Hit up the regex content shield with a system message
+## expect to get no violation from a regex detector;
+cmd = """curl -X POST http://localhost:5001/v1/safety/run-shield \
+-H "Content-Type: application/json" \
+-d '{
+  "shield_id": "regex",
+  "messages": [
+    {
+      "content": "This is a test message",
+      "role": "system"
+    }
+  ]
+}' | jq '.'"""
+
+result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+print(result.stdout)
+
+
+# %% Hit up the regex content shield with a user message
+## expect to get an error since the detector was configured to only process system messages
+cmd = """curl -X POST http://localhost:5001/v1/safety/run-shield \
+-H "Content-Type: application/json" \
+-d '{
+  "shield_id": "regex",
+  "messages": [
+    {
+      "content": "This is a test message",
+      "role": "user"
+    }
+  ]
+}' | jq '.'"""
+
+result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+print(result.stdout)
+
+# %% Hit up the regex content shield with a list of messages
+cmd = """curl -X POST http://localhost:5001/v1/safety/run-shield \
+-H "Content-Type: application/json" \
+-d '{
+  "shield_id": "regex",
+  "messages": [
+    {
+      "content": "This is a test message",
+      "role": "user"
+    },
+    {
+      "content": "My email is test@ibm.com",
+      "role": "system"}
+  ]
+}' | jq '.'"""
+
+result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+print(result.stdout)
+
+#############
 # %% Hit up the content shield with a system message
 ## expect to get a violation from a hap detector; no violation from a regex detector
 cmd = """curl -X POST http://localhost:5001/v1/safety/run-shield \
