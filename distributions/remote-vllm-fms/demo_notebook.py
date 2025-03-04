@@ -74,7 +74,7 @@ cmd = """curl -X POST http://localhost:5001/v1/safety/run-shield \
   "messages": [
     {
       "content": "This is a test message",
-      "role": "system"
+      "role": "user"
     }
   ]
 }' | jq '.'"""
