@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from .batch_support import RequestBatcher
 import asyncio
 import logging
 from abc import ABC, abstractmethod
@@ -117,10 +117,13 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
     """Base class for all safety detectors"""
 
     # Class constants
-    DEFAULT_TIMEOUT: ClassVar[float] = 30.0
-    MAX_RETRIES: ClassVar[int] = 3
-    BACKOFF_FACTOR: ClassVar[float] = 1.5
+    DEFAULT_TIMEOUT: ClassVar[float] = 20.0
+    MAX_RETRIES: ClassVar[int] = 2
+    BACKOFF_FACTOR: ClassVar[float] = 1.2
     VALID_SCHEMES: ClassVar[set] = {"http", "https"}
+    BATCH_SIZE: ClassVar[int] = 25
+    BATCH_WAIT_TIME: ClassVar[float] = 0.05
+    BATCH_THRESHOLD: ClassVar[int] = 3
 
     def __init__(self, config: BaseDetectorConfig) -> None:
         """Initialize detector with configuration"""
@@ -129,6 +132,7 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         self.score_threshold: float = config.confidence_threshold
         self._http_client: Optional[httpx.AsyncClient] = None
         self._shield_store: Optional[ShieldStore] = SimpleShieldStore()  # Add this line
+        self._request_batcher: Optional[RequestBatcher] = None  # Add batcher
         self._validate_config()
 
     @property
@@ -153,14 +157,25 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         logger.info(f"Initializing {self.__class__.__name__}")
         self._http_client = httpx.AsyncClient(
             timeout=self.DEFAULT_TIMEOUT,
-            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+            limits=httpx.Limits(
+                max_keepalive_connections=100, max_connections=200, keepalive_expiry=30
+            ),
         )
+        # Initialize request batcher
+        self._request_batcher = RequestBatcher(
+            batch_size=self.BATCH_SIZE,
+            max_wait_time=self.BATCH_WAIT_TIME,
+            max_retries=self.MAX_RETRIES,
+        )
+        await self._request_batcher.initialize()
 
     async def shutdown(self) -> None:
         """Clean up detector resources"""
         logger.info(f"Shutting down {self.__class__.__name__}")
         if self._http_client:
             await self._http_client.aclose()
+        if self._request_batcher:
+            await self._request_batcher.shutdown()
 
     async def register_shield(self, shield: Shield) -> None:
         """Register a shield with the detector"""
@@ -334,6 +349,25 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         if not self._http_client:
             raise DetectorError("HTTP client not initialized")
 
+        # Use batching for high concurrency scenarios
+        if (
+            self._request_batcher
+            and len(self.registered_shields) > self.BATCH_THRESHOLD
+        ):
+            try:
+                return await self._request_batcher.add_request(
+                    {
+                        "request": request,
+                        "headers": headers or self._prepare_headers(),
+                        "timeout": timeout or self.DEFAULT_TIMEOUT,
+                        "url": self._construct_url(),
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Batch request failed: {e}")
+                # Fall back to normal request processing
+
+        # Normal request processing
         url = self._construct_url()
         default_headers = self._prepare_headers()
         headers = {**default_headers, **(headers or {})}
