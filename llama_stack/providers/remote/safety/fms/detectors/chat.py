@@ -108,19 +108,6 @@ class ChatDetector(BaseDetector):
             },
         }
 
-        def _extract_detector_params(self) -> Dict[str, Any]:
-            """Extract non-null detector parameters"""
-            if not self.config.detector_params:
-                return {}
-
-            params = {
-                k: v
-                for k, v in vars(self.config.detector_params).items()
-                if v is not None
-            }
-            logger.debug(f"Extracted detector params: {params}")
-            return params
-
     async def _call_detector_api(
         self,
         messages: List[ChatMessage],
