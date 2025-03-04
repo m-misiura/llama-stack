@@ -21,19 +21,14 @@ from llama_stack.apis.safety import (
     RunShieldResponse,
     Safety,
     SafetyViolation,
-    ViolationLevel,
     ShieldStore,
+    ViolationLevel,
 )
-from llama_stack.apis.shields import Shield, Shields, ListShieldsResponse
+from llama_stack.apis.shields import ListShieldsResponse, Shield, Shields
 from llama_stack.providers.datatypes import ShieldsProtocolPrivate
 from llama_stack.providers.remote.safety.fms.config import (
     BaseDetectorConfig,
     EndpointType,
-    BaseDetectorConfig,
-    ChatDetectorConfig,
-    ContentDetectorConfig,
-    DetectorParams,
-    FMSSafetyProviderConfig,
 )
 
 # Configure logging
@@ -376,7 +371,7 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         """Process detection result and return both result and score"""
         score = detection.get("score", 0.0)
 
-        if not "score" in detection:
+        if "score" not in detection:
             logger.warning("Detection missing score field")
             return None, 0.0
 
