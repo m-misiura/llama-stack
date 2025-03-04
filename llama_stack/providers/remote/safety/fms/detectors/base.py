@@ -445,33 +445,40 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
                     )
                 )
 
-            # First validate all message types
+            supported_messages = []
+            unsupported_types = set()
+
             for msg in messages:
-                if not self._should_process_message(msg):
+                if self._should_process_message(msg):
+                    supported_messages.append(msg)
+                else:
                     msg_type = msg.type if hasattr(msg, "type") else type(msg).__name__
-                    logger.error(
+                    unsupported_types.add(msg_type)
+                    logger.warning(
                         f"Message type '{msg_type}' not supported by shield {shield_id}. "
                         f"Allowed types: {list(self.config.message_types)}"
                     )
-                    return RunShieldResponse(
-                        violation=SafetyViolation(
-                            violation_level=ViolationLevel.ERROR,
-                            user_message=(
-                                f"Message type '{msg_type}' not supported. "
-                                f"Shield {shield_id} only handles: {list(self.config.message_types)}"
-                            ),
-                            metadata={
-                                "status": "error",
-                                "error_type": "unsupported_message_type",
-                                "message_type": msg_type,
-                                "supported_types": list(self.config.message_types),
-                                "shield_id": shield_id,
-                            },
-                        )
-                    )
 
-            # All messages validated, proceed with implementation
-            return await self._run_shield_impl(shield_id, messages, params)
+            if not supported_messages:
+                return RunShieldResponse(
+                    violation=SafetyViolation(
+                        violation_level=ViolationLevel.WARN,
+                        user_message=(
+                            f"No supported message types to process. Shield {shield_id} only handles: "
+                            f"{list(self.config.message_types)}"
+                        ),
+                        metadata={
+                            "status": "skipped",
+                            "error_type": "no_supported_messages",
+                            "message_type": list(unsupported_types),
+                            "supported_types": list(self.config.message_types),
+                            "shield_id": shield_id,
+                        },
+                    )
+                )
+
+            # Step 4: Process supported messages
+            return await self._run_shield_impl(shield_id, supported_messages, params)
 
         except Exception as e:
             logger.error(f"Shield execution failed: {str(e)}", exc_info=True)
@@ -810,7 +817,7 @@ class DetectorProvider(Safety, Shields):
             if not filtered_messages:
                 return RunShieldResponse(
                     violation=SafetyViolation(
-                        violation_level=ViolationLevel.WARNING,
+                        violation_level=ViolationLevel.WARN,
                         user_message=(
                             f"No supported message types to process. Shield {shield_id} only handles: "
                             f"{list(detector.config.message_types)}"
