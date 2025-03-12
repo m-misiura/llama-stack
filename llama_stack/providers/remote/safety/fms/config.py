@@ -118,6 +118,7 @@ class BaseDetectorConfig:
     orchestrator_base_url: Optional[str] = None
     confidence_threshold: float = 0.5
     use_orchestrator_api: bool = False
+    detectors: Optional[Dict[str, Dict[str, Any]]] = None
     detector_params: Optional[DetectorParams] = None
     message_types: Set[str] = field(default_factory=lambda: MessageType.as_set())
     auth_token: Optional[str] = None

@@ -77,9 +77,6 @@ class ChatDetector(BaseDetector):
         self, messages: List[ChatMessage], params: Optional[Dict[str, Any]] = None
     ) -> ChatRequest:
         """Prepare the request based on API mode"""
-        # Extract detector params and ensure they're not None
-        detector_params = self._extract_detector_params()
-
         # Format messages for detector API
         formatted_messages = []
         for msg in messages:
@@ -89,24 +86,77 @@ class ChatDetector(BaseDetector):
             }
             formatted_messages.append(formatted_msg)
 
-        # For direct API, ensure params are passed correctly
         if self.config.use_orchestrator_api:
-            return {
-                "detectors": {
-                    self.config.detector_id: {**(params or {}), **detector_params}
-                },
-                "messages": formatted_messages,
-            }
+            payload = {"messages": formatted_messages}
 
-        # Direct API format with detector_params at root level
-        return {
-            "messages": formatted_messages,
-            "detector_params": {  # Move params to root level
-                "risk_name": detector_params.get("risk_name"),
-                "risk_definition": detector_params.get("risk_definition"),
-                "temperature": detector_params.get("temperature", 0.0),
-            },
-        }
+            # Initialize detector_config to avoid None
+            detector_config = {}
+
+            # NEW STRUCTURE: Check for top-level detectors first
+            if hasattr(self.config, "detectors") and self.config.detectors:
+                for detector_id, det_config in self.config.detectors.items():
+                    detector_config[detector_id] = det_config.get("detector_params", {})
+
+            # LEGACY STRUCTURE: Check for nested detectors
+            elif (
+                self.config.detector_params
+                and hasattr(self.config.detector_params, "detectors")
+                and self.config.detector_params.detectors
+            ):
+                detector_config = self.config.detector_params.detectors
+
+            # Handle flat params - group them into generic containers
+            elif self.config.detector_params:
+                detector_params = self._extract_detector_params()
+
+                # Organize into generic containers
+                organized_params = {}
+
+                # Model-specific parameters go in model_params
+                model_params = {}
+                if "temperature" in detector_params:
+                    model_params["temperature"] = detector_params["temperature"]
+
+                # Risk-related information goes in metadata
+                metadata = {}
+                for risk_field in ["risk_name", "risk_definition"]:
+                    if risk_field in detector_params:
+                        metadata[risk_field] = detector_params[risk_field]
+
+                # Add non-empty containers
+                if model_params:
+                    organized_params["model_params"] = model_params
+                if metadata:
+                    organized_params["metadata"] = metadata
+
+                # Any remaining params go in kwargs
+                kwargs = {
+                    k: v
+                    for k, v in detector_params.items()
+                    if k not in ["temperature", "risk_name", "risk_definition"]
+                }
+                if kwargs:
+                    organized_params["kwargs"] = kwargs
+
+                detector_config[self.config.detector_id] = organized_params
+
+            # Ensure we have a valid detectors map even if all checks fail
+            if not detector_config:
+                detector_config = {self.config.detector_id: {}}
+
+            payload["detectors"] = detector_config
+            return payload
+
+        # Direct API format remains unchanged
+        else:
+            # DIRECT MODE: Use flat parameters for API compatibility
+            # Don't organize into containers for direct mode
+            detector_params = self._extract_detector_params()
+
+            return {
+                "messages": formatted_messages,
+                "detector_params": detector_params if detector_params else params or {},
+            }
 
     async def _call_detector_api(
         self,

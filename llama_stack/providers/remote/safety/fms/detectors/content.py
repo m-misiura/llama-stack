@@ -78,25 +78,43 @@ class ContentDetector(BaseDetector):
         self, content: str, params: Optional[Dict[str, Any]] = None
     ) -> ContentRequest:
         """Prepare the request based on API mode"""
-        detector_params = self._extract_detector_params()
 
         if self.config.use_orchestrator_api:
-            # Use detectors configuration directly from detector_params if available
-            if (
-                hasattr(self.config.detector_params, "detectors")
-                and self.config.detector_params.detectors
-            ):
-                return {
-                    "detectors": self.config.detector_params.detectors,
-                    "content": content,
-                }
+            payload = {"content": content}  # Always use singular form
 
-        # Fallback to legacy format
-        detector_params = self._extract_detector_params()
-        return {
-            "contents": [content],
-            "detector_params": detector_params if detector_params else params or {},
-        }
+            # NEW STRUCTURE: Check for top-level detectors first
+            if hasattr(self.config, "detectors") and self.config.detectors:
+                detector_config = {}
+                for detector_id, det_config in self.config.detectors.items():
+                    detector_config[detector_id] = det_config.get("detector_params", {})
+                payload["detectors"] = detector_config
+                return payload
+
+            # LEGACY STRUCTURE: Check for nested detectors
+            elif self.config.detector_params and hasattr(
+                self.config.detector_params, "detectors"
+            ):
+                payload["detectors"] = self.config.detector_params.detectors
+                return payload
+
+            # Handle flat params
+            else:
+                detector_config = {}
+                detector_params = self._extract_detector_params()
+                if detector_params:
+                    detector_config[self.config.detector_id] = detector_params
+                payload["detectors"] = detector_config
+                return payload
+
+        else:
+            # DIRECT MODE: Use flat parameters for API compatibility
+            # Don't use generic containers for direct mode APIs
+            detector_params = self._extract_detector_params()
+
+            return {
+                "contents": [content],
+                "detector_params": detector_params if detector_params else params or {},
+            }
 
     def _extract_detections(self, response: Dict[str, Any]) -> DetectorResponse:
         """Extract detections from API response"""

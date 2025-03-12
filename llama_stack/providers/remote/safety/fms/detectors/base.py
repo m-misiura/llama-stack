@@ -239,6 +239,30 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         )
         return url
 
+    def _extract_detector_params(self) -> Dict[str, Any]:
+        """Extract detector parameters with support for generic format"""
+        if not self.config.detector_params:
+            return {}
+
+        params = {}
+
+        # NEW STYLE: Check for model_params/kwargs/metadata generic structure
+        for param_key in ["model_params", "kwargs", "metadata"]:
+            if hasattr(self.config.detector_params, param_key):
+                generic_params = getattr(self.config.detector_params, param_key)
+                if generic_params:
+                    # Use the generic params directly without parsing
+                    return {param_key: generic_params}
+
+        # LEGACY STYLE: Extract individual params
+        params = {
+            k: v
+            for k, v in vars(self.config.detector_params).items()
+            if v is not None and k not in ["detectors"]
+        }
+
+        return params
+
     def _prepare_headers(self) -> Headers:
         """Prepare request headers based on configuration"""
         headers: Headers = {
@@ -258,30 +282,37 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         self, messages: List[Message], params: Optional[Dict[str, Any]] = None
     ) -> RequestPayload:
         """Prepare request payload based on endpoint type and orchestrator mode"""
+        logger.debug(
+            f"Preparing payload - use_orchestrator: {self.config.use_orchestrator_api}, "
+            f"detector_id: {self.config.detector_id}"
+        )
+
         if self.config.use_orchestrator_api:
             payload: RequestPayload = {}
 
-            # Handle detector configuration
-            if self.config.detector_params:
-                # Case 1: New style with explicit detectors configuration
+            # NEW STRUCTURE: Handle detectors at top level instead of under detector_params
+            if hasattr(self.config, "detectors") and self.config.detectors:
+                # Process the new structure with detectors at top level
+                detector_config = {}
+                for detector_id, det_config in self.config.detectors.items():
+                    detector_config[detector_id] = det_config.get("detector_params", {})
+
+                payload["detectors"] = detector_config
+
+            # BACKWARD COMPATIBILITY: Handle legacy structures
+            elif self.config.detector_params:
                 if (
                     hasattr(self.config.detector_params, "detectors")
                     and self.config.detector_params.detectors
                 ):
-                    # Pass through detectors configuration as-is
+                    # Handle current nested structure
                     payload["detectors"] = self.config.detector_params.detectors
                 else:
-                    # Legacy style: Convert any detector params to detector config
+                    # Handle flat params
                     detector_config = {}
-                    detector_params = {
-                        k: v
-                        for k, v in vars(self.config.detector_params).items()
-                        if v is not None and k != "detectors"
-                    }
-
+                    detector_params = self._extract_detector_params()
                     if detector_params:
                         detector_config[self.config.detector_id] = detector_params
-
                     payload["detectors"] = detector_config
 
             # Add content or messages based on mode
@@ -293,30 +324,48 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
             logger.debug(f"Prepared orchestrator payload: {payload}")
             return payload
         else:
-            # Handle direct mode (unchanged)
-            detector_params = {}
-            if self.config.detector_params:
-                detector_params = {
-                    k: v
-                    for k, v in vars(self.config.detector_params).items()
-                    if v is not None
-                }
+            # DIRECT MODE: Respect API-specific formats
+            detector_config = {}
+            detector_params = self._extract_detector_params()
+
+            # Extract parameters from nested containers if present
+            flattened_params = {}
+
+            # Handle complex parameter structures by flattening them for direct mode
+            if isinstance(detector_params, dict):
+                # First level: check for container structure
+                for container_name in ["metadata", "model_params", "kwargs"]:
+                    if container_name in detector_params:
+                        # Extract and flatten parameters from containers
+                        container = detector_params.get(container_name, {})
+                        if isinstance(container, dict):
+                            flattened_params.update(container)
+
+                # If no container structure was found, use params directly
+                if not flattened_params:
+                    flattened_params = detector_params
+            else:
+                flattened_params = detector_params
 
             if self.config.is_chat:
                 payload = {
                     "messages": [msg.dict() for msg in messages],
                     "detector_params": (
-                        detector_params if detector_params else params or {}
+                        flattened_params if flattened_params else params or {}
                     ),
                 }
             else:
+                # For content APIs in direct mode, use plural form for compatibility
                 payload = {
-                    "contents": [msg.content for msg in messages],
+                    "contents": [
+                        messages[0].content
+                    ],  # Send as array for all content APIs
                     "detector_params": (
-                        detector_params if detector_params else params or {}
+                        flattened_params if flattened_params else params or {}
                     ),
                 }
 
+            logger.debug(f"Direct mode payload: {payload}")
             return payload
 
     async def _make_request(
@@ -543,17 +592,42 @@ class SimpleShieldStore(ShieldStore):
                 f"Shield store {self._store_id} creating shield for {identifier} using config"
             )
 
-            # Extract detector params properly
+            # Extract detector params with full support for all structures
             detector_params = {}
-            if hasattr(config, "detector_params") and config.detector_params:
-                detector_params = {
-                    k: v
-                    for k, v in vars(config.detector_params).items()
-                    if v is not None and k != "detectors"  # Exclude detectors field
-                }
-                # Handle orchestrator mode
-                if config.detector_params.detectors:
+
+            # NEW STRUCTURE: Check for top-level detectors first
+            if hasattr(config, "detectors") and config.detectors:
+                detector_params = {"detectors": {}}
+                for det_id, det_config in config.detectors.items():
+                    detector_params["detectors"][det_id] = det_config.get(
+                        "detector_params", {}
+                    )
+
+            # LEGACY STRUCTURES: Handle detector_params variations
+            elif hasattr(config, "detector_params") and config.detector_params:
+                # Check for generic parameter containers first
+                for param_key in ["model_params", "kwargs", "metadata"]:
+                    if hasattr(config.detector_params, param_key):
+                        generic_params = getattr(config.detector_params, param_key)
+                        if generic_params:
+                            detector_params = {param_key: generic_params}
+                            break
+
+                # If no generic containers, check for detectors object
+                if (
+                    not detector_params
+                    and hasattr(config.detector_params, "detectors")
+                    and config.detector_params.detectors
+                ):
                     detector_params = {"detectors": config.detector_params.detectors}
+
+                # If still empty, extract flat params
+                if not detector_params:
+                    detector_params = {
+                        k: v
+                        for k, v in vars(config.detector_params).items()
+                        if v is not None and k != "detectors"
+                    }
 
             # Create shield with all required fields
             shield = Shield(
@@ -563,7 +637,7 @@ class SimpleShieldStore(ShieldStore):
                 type="shield",
                 name=f"{identifier} Shield",
                 description=f"Safety shield for {identifier}",
-                params=detector_params,  # Use extracted params
+                params=detector_params,
                 metadata={
                     "detector_type": "content" if not config.is_chat else "chat",
                     "message_types": list(config.message_types),
@@ -680,8 +754,47 @@ class DetectorProvider(Safety, Shields):
             # Create shields directly without relying on shield store methods
             for detector in self.detectors.values():
                 config_id = detector.config.detector_id
+                detector_params = {}
 
-                # Create shield with properties we know are needed
+                # NEW STRUCTURE: Check for top-level detectors first
+                if hasattr(detector.config, "detectors") and detector.config.detectors:
+                    detector_params = {"detectors": {}}
+                    for det_id, det_config in detector.config.detectors.items():
+                        detector_params["detectors"][det_id] = det_config.get(
+                            "detector_params", {}
+                        )
+                # LEGACY STRUCTURES: Handle detector_params variations
+                elif (
+                    hasattr(detector.config, "detector_params")
+                    and detector.config.detector_params
+                ):
+                    # Check for generic parameter containers first
+                    for param_key in ["model_params", "kwargs", "metadata"]:
+                        if hasattr(detector.config.detector_params, param_key):
+                            generic_params = getattr(
+                                detector.config.detector_params, param_key
+                            )
+                            if generic_params:
+                                detector_params = {param_key: generic_params}
+                                break
+
+                    # If no generic containers, check for detectors object
+                    if (
+                        not detector_params
+                        and hasattr(detector.config.detector_params, "detectors")
+                        and detector.config.detector_params.detectors
+                    ):
+                        detector_params = {
+                            "detectors": detector.config.detector_params.detectors
+                        }
+
+                    # If still empty, extract flat params
+                    if not detector_params:
+                        detector_params = {
+                            k: v
+                            for k, v in vars(detector.config.detector_params).items()
+                            if v is not None and k != "detectors"
+                        }
                 shield = Shield(
                     identifier=config_id,
                     provider_id="fms-safety",
@@ -689,7 +802,7 @@ class DetectorProvider(Safety, Shields):
                     type="shield",
                     name=f"{config_id} Shield",
                     description=f"Safety shield for {config_id}",
-                    params={},  # Will be populated based on detector config
+                    params=detector_params,
                     metadata={
                         "detector_type": (
                             "content" if not detector.config.is_chat else "chat"
@@ -698,25 +811,6 @@ class DetectorProvider(Safety, Shields):
                         "confidence_threshold": detector.config.confidence_threshold,
                     },
                 )
-
-                # Add detector parameters if available
-                if (
-                    hasattr(detector.config, "detector_params")
-                    and detector.config.detector_params
-                ):
-                    if (
-                        hasattr(detector.config.detector_params, "detectors")
-                        and detector.config.detector_params.detectors
-                    ):
-                        shield.params = {
-                            "detectors": detector.config.detector_params.detectors
-                        }
-                    else:
-                        shield.params = {
-                            k: v
-                            for k, v in vars(detector.config.detector_params).items()
-                            if v is not None and k != "detectors"
-                        }
 
                 self._shields[config_id] = shield
                 await detector.register_shield(shield)
