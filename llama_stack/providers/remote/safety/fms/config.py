@@ -114,25 +114,27 @@ class BaseDetectorConfig:
 
     detector_id: str
     is_chat: bool = False
-    base_url: Optional[str] = None
-    orchestrator_base_url: Optional[str] = None
+    detector_url: Optional[str] = None
+    orchestrator_url: Optional[str] = None
     confidence_threshold: float = 0.5
-    use_orchestrator_api: bool = False
     detectors: Optional[Dict[str, Dict[str, Any]]] = None
     detector_params: Optional[DetectorParams] = None
     message_types: Set[str] = field(default_factory=lambda: MessageType.as_set())
     auth_token: Optional[str] = None
 
+    @property
+    def use_orchestrator_api(self) -> bool:
+        """Determine if orchestrator API should be used based on URL configuration"""
+        return bool(self.orchestrator_url)
+
     def _validate_urls(self) -> None:
         """Validate URL configurations"""
-        if not self.use_orchestrator_api and not self.base_url:
-            raise ValueError("base_url is required when use_orchestrator_api is False")
-        if self.use_orchestrator_api and not self.orchestrator_base_url:
-            raise ValueError(
-                "orchestrator_base_url is required when use_orchestrator_api is True"
-            )
+        if not self.use_orchestrator_api and not self.detector_url:
+            raise ValueError("detector_url is required when not using orchestrator API")
+        if self.use_orchestrator_api and not self.orchestrator_url:
+            raise ValueError("orchestrator_url is required when using orchestrator API")
 
-        for url in [self.base_url, self.orchestrator_base_url]:
+        for url in [self.detector_url, self.orchestrator_url]:
             if url:
                 parsed = urlparse(url)
                 if not all([parsed.scheme, parsed.netloc]):
@@ -174,9 +176,6 @@ class BaseDetectorConfig:
 class ContentDetectorConfig(BaseDetectorConfig):
     """Configuration for content detectors"""
 
-    allow_list: Optional[List[str]] = None
-    block_list: Optional[List[str]] = None
-
     def __post_init__(self):
         self.is_chat = False
         super().__post_init__()
@@ -198,8 +197,12 @@ class FMSSafetyProviderConfig:
     """Configuration for the FMS Safety Provider organized by shields"""
 
     shields: Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]
-    orchestrator_base_url: Optional[str] = None
-    use_orchestrator_api: bool = False
+    orchestrator_url: Optional[str] = None  # Renamed from orchestrator_base_url
+
+    @property
+    def use_orchestrator_api(self) -> bool:
+        """Determine if orchestrator API should be used based on URL configuration"""
+        return bool(self.orchestrator_url)
 
     def __post_init__(self):
         """Convert shield configurations to proper config objects and validate"""
@@ -275,8 +278,8 @@ class FMSSafetyProviderConfig:
 
     def _update_detector_settings(self, shield: BaseDetectorConfig) -> None:
         """Update shield settings with orchestrator configuration"""
-        shield.use_orchestrator_api = True
-        shield.orchestrator_base_url = self.orchestrator_base_url
+        # No need to set use_orchestrator_api as it's now computed
+        shield.orchestrator_url = self.orchestrator_url
 
     def propagate_orchestrator_settings(self) -> None:
         """Propagate orchestrator settings to all shields"""
@@ -309,19 +312,19 @@ class FMSSafetyProviderConfig:
     def validate_orchestrator_config(self):
         """Validate orchestrator configuration"""
         if self.use_orchestrator_api:
-            if not self.orchestrator_base_url:
+            if not self.orchestrator_url:
                 raise ValueError(
-                    "orchestrator_base_url is required when use_orchestrator_api is True"
+                    "orchestrator_url is required when using orchestrator API"
                 )
 
             invalid_shields = [
                 shield_id
                 for shield_id, shield in self.shields.items()
-                if shield.base_url is not None
+                if shield.detector_url is not None  # Changed from base_url
             ]
 
             if invalid_shields:
                 raise ValueError(
-                    f"When using orchestrator API, base_url should not be specified for shields: {invalid_shields}. "
-                    "All requests will be routed through the orchestrator_base_url."
+                    f"When using orchestrator API, detector_url should not be specified for shields: {invalid_shields}. "
+                    "All requests will be routed through the orchestrator_url."
                 )

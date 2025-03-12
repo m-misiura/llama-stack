@@ -210,22 +210,22 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
     def _construct_url(self) -> str:
         """Construct API URL based on configuration"""
         if self.config.use_orchestrator_api:
-            if not self.config.orchestrator_base_url:
+            if not self.config.orchestrator_url:
                 raise DetectorConfigError(
-                    "orchestrator_base_url is required when use_orchestrator_api is True"
+                    "orchestrator_url is required when use_orchestrator_api is True"
                 )
-            base_url = self.config.orchestrator_base_url
+            base_url = self.config.orchestrator_url
             endpoint_info = (
                 EndpointType.ORCHESTRATOR_CHAT.value
                 if self.config.is_chat
                 else EndpointType.ORCHESTRATOR_CONTENT.value
             )
         else:
-            if not self.config.base_url:
+            if not self.config.detector_url:
                 raise DetectorConfigError(
-                    "base_url is required when use_orchestrator_api is False"
+                    "detector_url is required when use_orchestrator_api is False"
                 )
-            base_url = self.config.base_url
+            base_url = self.config.detector_url
             endpoint_info = (
                 EndpointType.DIRECT_CHAT.value
                 if self.config.is_chat
