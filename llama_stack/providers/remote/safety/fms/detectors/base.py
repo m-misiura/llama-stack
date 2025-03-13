@@ -737,19 +737,32 @@ class DetectorProvider(Safety, Shields):
         try:
             # First register all configurations if supported
             if hasattr(self._shield_store, "register_detector_config"):
+                # Process these in parallel
+                tasks = []
                 for config_id, config in self._pending_configs:
-                    await self._shield_store.register_detector_config(config_id, config)
+                    tasks.append(
+                        self._shield_store.register_detector_config(config_id, config)
+                    )
+
+                if tasks:
+                    await asyncio.gather(*tasks)
             else:
                 logger.debug(
                     f"Provider {self._provider_id} shield store doesn't support register_detector_config"
                 )
 
-            # Clear pending configs regardless
+            # Clear pending configs
             self._pending_configs.clear()
 
-            # Initialize detectors
+            # Initialize detectors in parallel with controlled concurrency
+            detector_init_tasks = []
             for detector in self.detectors.values():
-                await detector.initialize()
+                detector_init_tasks.append(detector.initialize())
+
+            if detector_init_tasks:
+                await asyncio.gather(*detector_init_tasks)
+
+            shields_to_register = []
 
             # Create shields directly without relying on shield store methods
             for detector in self.detectors.values():
@@ -813,7 +826,15 @@ class DetectorProvider(Safety, Shields):
                 )
 
                 self._shields[config_id] = shield
-                await detector.register_shield(shield)
+                shields_to_register.append((detector, shield))
+
+            # Register shields in parallel
+            register_tasks = []
+            for detector, shield in shields_to_register:
+                register_tasks.append(detector.register_shield(shield))
+
+            if register_tasks:
+                await asyncio.gather(*register_tasks)
 
             self._initialized = True
             logger.info(
@@ -984,19 +1005,20 @@ class DetectorProvider(Safety, Shields):
                 and detector.config.detector_params.detectors is not None
             )
 
-            # Step 6: Process each message
-            for _idx, (orig_idx, message) in enumerate(filtered_messages):
-                current_result = {
-                    "message_index": orig_idx,
-                    "text": message.content,
-                    "status": "pass",
-                    "score": None,
-                    "detection_type": None,
-                }
+            # Step 6: Process messages in parallel
+            if is_composite:
+                # Define function to process composite detector message
+                async def process_composite_message(orig_idx, message):
+                    try:
+                        current_result = {
+                            "message_index": orig_idx,
+                            "text": message.content,
+                            "status": "pass",
+                            "score": None,
+                            "detection_type": None,
+                        }
 
-                try:
-                    if is_composite:
-                        # Step 6a: Handle composite detector
+                        # Make API request for this message
                         request = detector._prepare_request_payload([message], params)
                         response = await detector._make_request(request)
                         detections = response.get("detections", [])
@@ -1055,24 +1077,83 @@ class DetectorProvider(Safety, Shields):
                         current_result["individual_detector_results"] = (
                             individual_results
                         )
-                        total_detections += message_detections
 
-                        if message_has_violation:
-                            has_violation = True
-                            if message_highest_score > highest_violation_score:
-                                highest_violation_score = message_highest_score
+                        return {
+                            "result": current_result,
+                            "has_violation": message_has_violation,
+                            "highest_score": message_highest_score,
+                            "detections": message_detections,
+                        }
+                    except Exception as e:
+                        logger.error(
+                            f"Message processing failed for message {orig_idx}: {e}"
+                        )
+                        return {
+                            "result": {
+                                "message_index": orig_idx,
+                                "text": message.content if message else "",
+                                "status": "error",
+                                "error": str(e),
+                            },
+                            "has_violation": False,
+                            "highest_score": 0.0,
+                            "detections": 0,
+                            "error": str(e),
+                        }
 
-                    else:
-                        # Step 6b: Handle non-composite detector
+                # Create tasks for all messages with controlled concurrency
+                # Use semaphore to limit concurrent API calls
+                semaphore = asyncio.Semaphore(10)  # Max 10 concurrent requests
+
+                async def process_with_semaphore(orig_idx, message):
+                    async with semaphore:
+                        return await process_composite_message(orig_idx, message)
+
+                # Create and execute tasks
+                tasks = [
+                    process_with_semaphore(orig_idx, message)
+                    for orig_idx, message in filtered_messages
+                ]
+
+                # Await all tasks
+                task_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Process results
+                for result in task_results:
+                    if isinstance(result, Exception):
+                        # Handle unexpected exceptions
+                        logger.error(f"Task execution failed: {result}")
+                        continue
+
+                    # Extract data
+                    message_results.append(result["result"])
+
+                    # Update aggregate metrics
+                    if result["has_violation"]:
+                        has_violation = True
+                        total_detections += result["detections"]
+                        if result["highest_score"] > highest_violation_score:
+                            highest_violation_score = result["highest_score"]
+
+            else:
+                # For non-composite detectors
+                async def process_standard_message(orig_idx, message):
+                    try:
+                        current_result = {
+                            "message_index": orig_idx,
+                            "text": message.content,
+                            "status": "pass",
+                            "score": None,
+                            "detection_type": None,
+                        }
+
+                        # Make API request for this message
                         response = await detector._run_shield_impl(
                             shield_id, [message], params
                         )
+
                         if response.violation:
-                            has_violation = True
-                            total_detections += 1
                             score = response.violation.metadata.get("score")
-                            if score and score > highest_violation_score:
-                                highest_violation_score = score
                             current_result.update(
                                 {
                                     "status": "violation",
@@ -1083,22 +1164,68 @@ class DetectorProvider(Safety, Shields):
                                 }
                             )
 
-                    message_results.append(current_result)
+                            return {
+                                "result": current_result,
+                                "has_violation": True,
+                                "highest_score": score or 0.0,
+                                "detections": 1,
+                            }
 
-                except Exception as e:
-                    logger.error(f"Message processing failed: {e}")
-                    return RunShieldResponse(
-                        violation=SafetyViolation(
-                            violation_level=ViolationLevel.ERROR,
-                            user_message=f"Message processing failed: {str(e)}",
-                            metadata={
+                        return {
+                            "result": current_result,
+                            "has_violation": False,
+                            "highest_score": 0.0,
+                            "detections": 0,
+                        }
+                    except Exception as e:
+                        logger.error(
+                            f"Message processing failed for message {orig_idx}: {e}"
+                        )
+                        return {
+                            "result": {
+                                "message_index": orig_idx,
+                                "text": message.content if message else "",
                                 "status": "error",
-                                "error_type": "processing_error",
-                                "shield_id": shield_id,
                                 "error": str(e),
                             },
-                        )
-                    )
+                            "has_violation": False,
+                            "highest_score": 0.0,
+                            "detections": 0,
+                            "error": str(e),
+                        }
+
+                # Create tasks with controlled concurrency
+                semaphore = asyncio.Semaphore(10)  # Max 10 concurrent requests
+
+                async def process_with_semaphore(orig_idx, message):
+                    async with semaphore:
+                        return await process_standard_message(orig_idx, message)
+
+                # Create and execute tasks
+                tasks = [
+                    process_with_semaphore(orig_idx, message)
+                    for orig_idx, message in filtered_messages
+                ]
+
+                # Await all tasks
+                task_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Process results
+                for result in task_results:
+                    if isinstance(result, Exception):
+                        # Handle unexpected exceptions
+                        logger.error(f"Task execution failed: {result}")
+                        continue
+
+                    # Extract data
+                    message_results.append(result["result"])
+
+                    # Update aggregate metrics
+                    if result["has_violation"]:
+                        has_violation = True
+                        total_detections += result["detections"]
+                        if result["highest_score"] > highest_violation_score:
+                            highest_violation_score = result["highest_score"]
 
             # Step 7: Calculate summary statistics
             total_filtered = len(filtered_messages)
