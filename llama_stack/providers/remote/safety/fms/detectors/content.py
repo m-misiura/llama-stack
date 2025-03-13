@@ -64,13 +64,12 @@ class ContentDetector(BaseDetector):
         logger.info(f"Initialized ContentDetector with config: {vars(config)}")
 
     def _extract_detector_params(self) -> Dict[str, Any]:
-        """Extract non-null detector parameters"""
+        """Extract detector parameters with support for generic format"""
         if not self.config.detector_params:
             return {}
 
-        params = {
-            k: v for k, v in vars(self.config.detector_params).items() if v is not None
-        }
+        # Use to_dict() to flatten our categorized structure into what the API expects
+        params = self.config.detector_params.to_dict()
         logger.debug(f"Extracted detector params: {params}")
         return params
 
