@@ -30,26 +30,6 @@ class ContentDetectorError(DetectorError):
     pass
 
 
-@dataclass(frozen=True)
-class ContentDetectionMetadata:
-    """Structured metadata for content detections"""
-
-    allow_list_match: Optional[str] = None
-    block_list_match: Optional[str] = None
-    additional_metadata: Optional[Dict[str, Any]] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert metadata to dictionary format"""
-        result = {}
-        if self.allow_list_match:
-            result["allow_list_match"] = self.allow_list_match
-        if self.block_list_match:
-            result["block_list_match"] = self.block_list_match
-        if self.additional_metadata:
-            result["metadata"] = self.additional_metadata
-        return result
-
-
 class ContentDetector(BaseDetector):
     """Detector for content-based safety checks"""
 
@@ -169,12 +149,6 @@ class ContentDetector(BaseDetector):
 
         score = detection.get("score", 0)
         if score > self.score_threshold:
-            metadata = ContentDetectionMetadata(
-                allow_list_match=detection.get("allow_list_match"),
-                block_list_match=detection.get("block_list_match"),
-                additional_metadata=detection.get("metadata"),
-            )
-
             return DetectionResult(
                 detection="Yes",
                 detection_type=detection["detection_type"],
@@ -183,7 +157,7 @@ class ContentDetector(BaseDetector):
                 text=detection.get("text", ""),
                 start=detection.get("start", 0),
                 end=detection.get("end", 0),
-                metadata=metadata.to_dict(),
+                metadata=detection.get("metadata", {}),
             )
         return None
 
