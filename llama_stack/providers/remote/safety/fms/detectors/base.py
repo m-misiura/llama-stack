@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
+import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -60,6 +62,22 @@ class DetectorValidationError(DetectorError):
     pass
 
 
+class DetectorNetworkError(DetectorError):
+    """Network connectivity issues"""
+
+
+class DetectorTimeoutError(DetectorError):
+    """Request timeout errors"""
+
+
+class DetectorRateLimitError(DetectorError):
+    """Rate limiting errors"""
+
+
+class DetectorAuthError(DetectorError):
+    """Authentication errors"""
+
+
 # Type aliases
 MessageDict = Dict[str, Any]
 DetectorResponse = Dict[str, Any]
@@ -112,9 +130,6 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
     """Base class for all safety detectors"""
 
     # Class constants
-    DEFAULT_TIMEOUT: ClassVar[float] = 30.0
-    MAX_RETRIES: ClassVar[int] = 3
-    BACKOFF_FACTOR: ClassVar[float] = 1.5
     VALID_SCHEMES: ClassVar[set] = {"http", "https"}
 
     def __init__(self, config: BaseDetectorConfig) -> None:
@@ -147,8 +162,11 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         """Initialize detector resources"""
         logger.info(f"Initializing {self.__class__.__name__}")
         self._http_client = httpx.AsyncClient(
-            timeout=self.DEFAULT_TIMEOUT,
-            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+            timeout=self.config.request_timeout,
+            limits=httpx.Limits(
+                max_keepalive_connections=self.config.max_keepalive_connections,
+                max_connections=self.config.max_connections,
+            ),
         )
 
     async def shutdown(self) -> None:
@@ -410,37 +428,79 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         default_headers = self._prepare_headers()
         headers = {**default_headers, **(headers or {})}
 
-        for attempt in range(self.MAX_RETRIES):
+        for attempt in range(self.config.max_retries):
             try:
                 response = await self._http_client.post(
                     url,
                     json=request,
                     headers=headers,
-                    timeout=timeout or self.DEFAULT_TIMEOUT,
+                    timeout=timeout or self.config.request_timeout,
                 )
-                response.raise_for_status()
-                return response.json()
 
-            except httpx.HTTPStatusError as e:
+                # Handle different error codes specifically
+                if response.status_code == 429:
+                    # Rate limit handling
+                    retry_after = int(
+                        response.headers.get(
+                            "Retry-After", self.config.backoff_factor * 2
+                        )
+                    )
+                    logger.warning(f"Rate limited, waiting {retry_after}s before retry")
+                    await asyncio.sleep(retry_after)
+                    continue
+
+                elif response.status_code == 401:
+                    raise DetectorAuthError(f"Authentication failed: {response.text}")
+
+                elif response.status_code == 503:
+                    # Service unavailable - return informative error if this is our last retry
+                    if attempt == self.config.max_retries - 1:
+                        error_details = {
+                            "timestamp": datetime.datetime.now().isoformat(),
+                            "service": urlparse(url).netloc,
+                            "detector_id": self.config.detector_id,
+                            "retries_attempted": self.config.max_retries,
+                            "status_code": 503,
+                        }
+
+                        logger.error(
+                            f"Service unavailable after {self.config.max_retries} attempts: "
+                            f"{error_details['service']} for detector {self.config.detector_id}"
+                        )
+
+                        raise DetectorNetworkError(
+                            f"Safety service is currently unavailable. The system attempted {self.config.max_retries}"
+                            f"retries but couldn't connect to {error_details['service']}. Please try again "
+                            f"later or contact your administrator if the problem persists."
+                        )
+
+                    # Continue with backoff if we have more retries
+                    logger.warning(
+                        f"Service unavailable (attempt {attempt+1}/{self.config.max_retries}), retrying..."
+                    )
+
+            except httpx.TimeoutException as e:
                 logger.error(
-                    f"HTTP error occurred (attempt {attempt + 1}/{self.MAX_RETRIES}): {e.response.text}"
+                    f"Request timed out (attempt {attempt + 1}/{self.config.max_retries})"
                 )
-                if attempt == self.MAX_RETRIES - 1:
-                    raise DetectorRequestError(
-                        f"API Error after {self.MAX_RETRIES} attempts: {e.response.text}"
+                if attempt == self.config.max_retries - 1:
+                    raise DetectorTimeoutError(
+                        f"Request timed out after {self.config.max_retries} attempts"
                     ) from e
 
-            except httpx.RequestError as e:
+            except httpx.HTTPStatusError as e:
+                # More specific error handling based on status code
                 logger.error(
-                    f"Request error occurred (attempt {attempt + 1}/{self.MAX_RETRIES}): {str(e)}"
+                    f"HTTP error {e.response.status_code} (attempt {attempt + 1}/{self.config.max_retries}): {e.response.text}"
                 )
-                if attempt == self.MAX_RETRIES - 1:
+                if attempt == self.config.max_retries - 1:
                     raise DetectorRequestError(
-                        f"Request Error after {self.MAX_RETRIES} attempts: {str(e)}"
+                        f"API Error after {self.config.max_retries} attempts: {e.response.text}"
                     ) from e
 
             # Exponential backoff
-            await asyncio.sleep(self.BACKOFF_FACTOR**attempt)
+            jitter = random.uniform(0.8, 1.2)
+            await asyncio.sleep((self.config.backoff_factor**attempt) * jitter)
 
     def _process_detection(
         self, detection: Dict[str, Any]

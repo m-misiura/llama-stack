@@ -324,6 +324,11 @@ class BaseDetectorConfig:
 
     # Runtime execution parameters
     max_concurrency: int = 10  # Maximum concurrent API requests
+    request_timeout: float = 30.0  # HTTP request timeout in seconds
+    max_retries: int = 3  # Maximum number of retry attempts
+    backoff_factor: float = 1.5  # Exponential backoff multiplier
+    max_keepalive_connections: int = 5  # Max number of keepalive connections
+    max_connections: int = 10  # Max number of connections in the pool
 
     @property
     def use_orchestrator_api(self) -> bool:
