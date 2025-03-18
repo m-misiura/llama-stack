@@ -478,6 +478,10 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
                     logger.warning(
                         f"Service unavailable (attempt {attempt+1}/{self.config.max_retries}), retrying..."
                     )
+                else:
+                    # SUCCESS PATH: Return immediately for successful responses
+                    response.raise_for_status()
+                    return response.json()
 
             except httpx.TimeoutException as e:
                 logger.error(
@@ -501,8 +505,6 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
             # Exponential backoff
             jitter = random.uniform(0.8, 1.2)
             await asyncio.sleep((self.config.backoff_factor**attempt) * jitter)
-            response.raise_for_status()
-            return response.json()
 
     def _process_detection(
         self, detection: Dict[str, Any]
