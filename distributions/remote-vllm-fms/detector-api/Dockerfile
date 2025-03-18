@@ -29,7 +29,7 @@ RUN pip install --no-cache-dir -e .[distribution,server,telemetry] && \
         openai
 
 # Copy distribution files
-COPY distributions/remote-vllm-fms/orch-contents-chat/run.yaml /root/llamastack-run-remote-vllm.yaml
+COPY distributions/remote-vllm-fms/detector-api/run.yaml /root/llamastack-run-remote-vllm.yaml
 
 # Disable telemetry
 ENV OTEL_PYTHON_DISABLED=true

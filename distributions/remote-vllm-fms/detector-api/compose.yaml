@@ -2,7 +2,7 @@ services:
   llamastack:
     build:
       context: ../../..
-      dockerfile: ./distributions/remote-vllm-fms/three-detectors/Dockerfile
+      dockerfile: ./distributions/remote-vllm-fms/detector-api/Dockerfile
     ports:
       - "${LLAMA_STACK_PORT:-5001}:5001"
     env_file:
@@ -20,7 +20,7 @@ services:
       - FMS_REGEX_URL=${FMS_REGEX_URL}
       - FMS_HAP_URL=${FMS_HAP_URL}
       - FMS_CHAT_URL=${FMS_CHAT_URL}
-      - SQLITE_STORE_DIR=/root/.llama/distributions/remote-vllm-fms/three-detectors
+      - SQLITE_STORE_DIR=/root/.llama/distributions/remote-vllm-fms/detector-api
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001/v1/health"]
       interval: 30s
