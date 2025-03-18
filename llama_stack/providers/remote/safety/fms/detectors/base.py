@@ -501,6 +501,8 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
             # Exponential backoff
             jitter = random.uniform(0.8, 1.2)
             await asyncio.sleep((self.config.backoff_factor**attempt) * jitter)
+            response.raise_for_status()
+            return response.json()
 
     def _process_detection(
         self, detection: Dict[str, Any]
