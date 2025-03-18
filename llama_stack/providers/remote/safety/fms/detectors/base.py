@@ -1155,7 +1155,7 @@ class DetectorProvider(Safety, Shields):
 
                 # Create tasks for all messages with controlled concurrency
                 # Use semaphore to limit concurrent API calls
-                semaphore = asyncio.Semaphore(10)  # Max 10 concurrent requests
+                semaphore = asyncio.Semaphore(detector.config.max_concurrency)
 
                 async def process_with_semaphore(orig_idx, message):
                     async with semaphore:
@@ -1247,7 +1247,7 @@ class DetectorProvider(Safety, Shields):
                         }
 
                 # Create tasks with controlled concurrency
-                semaphore = asyncio.Semaphore(10)  # Max 10 concurrent requests
+                semaphore = asyncio.Semaphore(detector.config.max_concurrency)
 
                 async def process_with_semaphore(orig_idx, message):
                     async with semaphore:

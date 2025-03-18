@@ -322,6 +322,9 @@ class BaseDetectorConfig:
     # Flexible storage for any additional parameters
     _extra_params: Dict[str, Any] = field(default_factory=dict)
 
+    # Runtime execution parameters
+    max_concurrency: int = 10  # Maximum concurrent API requests
+
     @property
     def use_orchestrator_api(self) -> bool:
         """Determine if orchestrator API should be used"""
