@@ -109,36 +109,37 @@ class ChatDetector(BaseDetector):
             elif self.config.detector_params:
                 detector_params = self._extract_detector_params()
 
-                # Organize into generic containers
-                organized_params = {}
+                # Create a flat dictionary of parameters
+                flat_params = {}
 
-                # Model-specific parameters go in model_params
-                model_params = {}
-                if "temperature" in detector_params:
-                    model_params["temperature"] = detector_params["temperature"]
+                # Extract from model_params
+                if "model_params" in detector_params and isinstance(
+                    detector_params["model_params"], dict
+                ):
+                    flat_params.update(detector_params["model_params"])
 
-                # Risk-related information goes in metadata
-                metadata = {}
-                for risk_field in ["risk_name", "risk_definition"]:
-                    if risk_field in detector_params:
-                        metadata[risk_field] = detector_params[risk_field]
+                # Extract from metadata
+                if "metadata" in detector_params and isinstance(
+                    detector_params["metadata"], dict
+                ):
+                    flat_params.update(detector_params["metadata"])
 
-                # Add non-empty containers
-                if model_params:
-                    organized_params["model_params"] = model_params
-                if metadata:
-                    organized_params["metadata"] = metadata
+                # Extract from kwargs
+                if "kwargs" in detector_params and isinstance(
+                    detector_params["kwargs"], dict
+                ):
+                    flat_params.update(detector_params["kwargs"])
 
-                # Any remaining params go in kwargs
-                kwargs = {
-                    k: v
-                    for k, v in detector_params.items()
-                    if k not in ["temperature", "risk_name", "risk_definition"]
-                }
-                if kwargs:
-                    organized_params["kwargs"] = kwargs
+                # Add any other direct parameters, but skip container dictionaries
+                for k, v in detector_params.items():
+                    if (
+                        k not in ["model_params", "metadata", "kwargs", "params"]
+                        and v is not None
+                    ):
+                        flat_params[k] = v
 
-                detector_config[self.config.detector_id] = organized_params
+                # Add all flattened parameters directly to detector configuration
+                detector_config[self.config.detector_id] = flat_params
 
             # Ensure we have a valid detectors map even if all checks fail
             if not detector_config:
@@ -153,9 +154,38 @@ class ChatDetector(BaseDetector):
             # Don't organize into containers for direct mode
             detector_params = self._extract_detector_params()
 
+            # Flatten the parameters for direct mode too
+            flat_params = {}
+
+            # Extract from model_params
+            if "model_params" in detector_params and isinstance(
+                detector_params["model_params"], dict
+            ):
+                flat_params.update(detector_params["model_params"])
+
+            # Extract from metadata
+            if "metadata" in detector_params and isinstance(
+                detector_params["metadata"], dict
+            ):
+                flat_params.update(detector_params["metadata"])
+
+            # Extract from kwargs
+            if "kwargs" in detector_params and isinstance(
+                detector_params["kwargs"], dict
+            ):
+                flat_params.update(detector_params["kwargs"])
+
+            # Add any other direct parameters
+            for k, v in detector_params.items():
+                if (
+                    k not in ["model_params", "metadata", "kwargs", "params"]
+                    and v is not None
+                ):
+                    flat_params[k] = v
+
             return {
                 "messages": formatted_messages,
-                "detector_params": detector_params if detector_params else params or {},
+                "detector_params": flat_params if flat_params else params or {},
             }
 
     async def _call_detector_api(
