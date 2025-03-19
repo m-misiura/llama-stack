@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import logging
+import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -60,6 +62,22 @@ class DetectorValidationError(DetectorError):
     pass
 
 
+class DetectorNetworkError(DetectorError):
+    """Network connectivity issues"""
+
+
+class DetectorTimeoutError(DetectorError):
+    """Request timeout errors"""
+
+
+class DetectorRateLimitError(DetectorError):
+    """Rate limiting errors"""
+
+
+class DetectorAuthError(DetectorError):
+    """Authentication errors"""
+
+
 # Type aliases
 MessageDict = Dict[str, Any]
 DetectorResponse = Dict[str, Any]
@@ -112,9 +130,6 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
     """Base class for all safety detectors"""
 
     # Class constants
-    DEFAULT_TIMEOUT: ClassVar[float] = 30.0
-    MAX_RETRIES: ClassVar[int] = 3
-    BACKOFF_FACTOR: ClassVar[float] = 1.5
     VALID_SCHEMES: ClassVar[set] = {"http", "https"}
 
     def __init__(self, config: BaseDetectorConfig) -> None:
@@ -147,8 +162,11 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         """Initialize detector resources"""
         logger.info(f"Initializing {self.__class__.__name__}")
         self._http_client = httpx.AsyncClient(
-            timeout=self.DEFAULT_TIMEOUT,
-            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+            timeout=self.config.request_timeout,
+            limits=httpx.Limits(
+                max_keepalive_connections=self.config.max_keepalive_connections,
+                max_connections=self.config.max_connections,
+            ),
         )
 
     async def shutdown(self) -> None:
@@ -210,22 +228,22 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
     def _construct_url(self) -> str:
         """Construct API URL based on configuration"""
         if self.config.use_orchestrator_api:
-            if not self.config.orchestrator_base_url:
+            if not self.config.orchestrator_url:
                 raise DetectorConfigError(
-                    "orchestrator_base_url is required when use_orchestrator_api is True"
+                    "orchestrator_url is required when use_orchestrator_api is True"
                 )
-            base_url = self.config.orchestrator_base_url
+            base_url = self.config.orchestrator_url
             endpoint_info = (
                 EndpointType.ORCHESTRATOR_CHAT.value
                 if self.config.is_chat
                 else EndpointType.ORCHESTRATOR_CONTENT.value
             )
         else:
-            if not self.config.base_url:
+            if not self.config.detector_url:
                 raise DetectorConfigError(
-                    "base_url is required when use_orchestrator_api is False"
+                    "detector_url is required when use_orchestrator_api is False"
                 )
-            base_url = self.config.base_url
+            base_url = self.config.detector_url
             endpoint_info = (
                 EndpointType.DIRECT_CHAT.value
                 if self.config.is_chat
@@ -238,6 +256,31 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
             f"Constructed URL: {url} for {'chat' if self.config.is_chat else 'content'} endpoint"
         )
         return url
+
+    def _extract_detector_params(self) -> Dict[str, Any]:
+        """Extract detector parameters from configuration"""
+        detector_params = {}
+
+        if hasattr(self.config, "detector_params"):
+            # For chat detectors, extract model_params and metadata directly
+            if hasattr(self.config.detector_params, "model_params"):
+                detector_params.update(self.config.detector_params.model_params)
+
+            if hasattr(self.config.detector_params, "metadata"):
+                detector_params.update(self.config.detector_params.metadata)
+
+            # Include any direct parameters
+            for k, v in vars(self.config.detector_params).items():
+                if v is not None and k not in [
+                    "model_params",
+                    "metadata",
+                    "kwargs",
+                    "params",
+                ]:
+                    if not (isinstance(v, (dict, list)) and len(v) == 0):
+                        detector_params[k] = v
+
+        return detector_params
 
     def _prepare_headers(self) -> Headers:
         """Prepare request headers based on configuration"""
@@ -258,30 +301,59 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         self, messages: List[Message], params: Optional[Dict[str, Any]] = None
     ) -> RequestPayload:
         """Prepare request payload based on endpoint type and orchestrator mode"""
+        logger.debug(
+            f"Preparing payload - use_orchestrator: {self.config.use_orchestrator_api}, "
+            f"detector_id: {self.config.detector_id}"
+        )
+
         if self.config.use_orchestrator_api:
             payload: RequestPayload = {}
 
-            # Handle detector configuration
-            if self.config.detector_params:
-                # Case 1: New style with explicit detectors configuration
+            # NEW STRUCTURE: Handle detectors at top level instead of under detector_params
+            if hasattr(self.config, "detectors") and self.config.detectors:
+                # Process the new structure with detectors at top level
+                detector_config = {}
+                for detector_id, det_config in self.config.detectors.items():
+                    detector_config[detector_id] = det_config.get("detector_params", {})
+
+                payload["detectors"] = detector_config
+
+            # BACKWARD COMPATIBILITY: Handle legacy structures
+            elif hasattr(self.config, "detector_params"):
+                # Create detector configuration
+                detector_config = {}
+
+                # Extract parameters directly without wrapping them
+                detector_params = {}
+
+                # For chat detectors, extract model_params and metadata properly
+                if hasattr(self.config.detector_params, "model_params"):
+                    detector_params.update(self.config.detector_params.model_params)
+
+                if hasattr(self.config.detector_params, "metadata"):
+                    detector_params.update(self.config.detector_params.metadata)
+
+                # Include direct parameters
+                for k, v in vars(self.config.detector_params).items():
+                    if v is not None and k not in [
+                        "model_params",
+                        "metadata",
+                        "kwargs",
+                        "params",
+                        "detectors",
+                    ]:
+                        if not (isinstance(v, (dict, list)) and len(v) == 0):
+                            detector_params[k] = v
+
+                # Handle composite detectors
                 if (
                     hasattr(self.config.detector_params, "detectors")
                     and self.config.detector_params.detectors
                 ):
-                    # Pass through detectors configuration as-is
                     payload["detectors"] = self.config.detector_params.detectors
                 else:
-                    # Legacy style: Convert any detector params to detector config
-                    detector_config = {}
-                    detector_params = {
-                        k: v
-                        for k, v in vars(self.config.detector_params).items()
-                        if v is not None and k != "detectors"
-                    }
-
-                    if detector_params:
-                        detector_config[self.config.detector_id] = detector_params
-
+                    # Add detector configuration to payload
+                    detector_config[self.config.detector_id] = detector_params
                     payload["detectors"] = detector_config
 
             # Add content or messages based on mode
@@ -293,30 +365,53 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
             logger.debug(f"Prepared orchestrator payload: {payload}")
             return payload
         else:
-            # Handle direct mode (unchanged)
-            detector_params = {}
-            if self.config.detector_params:
-                detector_params = {
-                    k: v
-                    for k, v in vars(self.config.detector_params).items()
-                    if v is not None
-                }
+            # DIRECT MODE: Respect API-specific formats
+            detector_params = self._extract_detector_params()
+
+            # Extract parameters from nested containers if present
+            flattened_params = {}
+
+            # Handle complex parameter structures by flattening them for direct mode
+            if isinstance(detector_params, dict):
+                # First level: check for container structure
+                for container_name in ["metadata", "model_params", "kwargs"]:
+                    if container_name in detector_params:
+                        # Extract and flatten parameters from containers
+                        container = detector_params.get(container_name, {})
+                        if isinstance(container, dict):
+                            flattened_params.update(container)
+
+                # If no container structure was found, use params directly
+                if not flattened_params:
+                    flattened_params = detector_params
+            else:
+                flattened_params = detector_params
+
+            # Merge with any passed parameters
+            if params:
+                flattened_params.update(params)
+
+            # Remove empty params dictionary if present
+            if "params" in flattened_params and (
+                flattened_params["params"] == {} or flattened_params["params"] is None
+            ):
+                del flattened_params["params"]
 
             if self.config.is_chat:
                 payload = {
                     "messages": [msg.dict() for msg in messages],
-                    "detector_params": (
-                        detector_params if detector_params else params or {}
-                    ),
+                    "detector_params": flattened_params if flattened_params else {},
                 }
             else:
+                # For content APIs in direct mode, use plural form for compatibility
                 payload = {
-                    "contents": [msg.content for msg in messages],
-                    "detector_params": (
-                        detector_params if detector_params else params or {}
-                    ),
+                    "contents": [
+                        messages[0].content
+                    ],  # Send as array for all content APIs
+                    "detector_params": flattened_params if flattened_params else {},
                 }
 
+            logger.debug(f"Direct mode payload: {payload}")
             return payload
 
     async def _make_request(
@@ -333,37 +428,83 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         default_headers = self._prepare_headers()
         headers = {**default_headers, **(headers or {})}
 
-        for attempt in range(self.MAX_RETRIES):
+        for attempt in range(self.config.max_retries):
             try:
                 response = await self._http_client.post(
                     url,
                     json=request,
                     headers=headers,
-                    timeout=timeout or self.DEFAULT_TIMEOUT,
+                    timeout=timeout or self.config.request_timeout,
                 )
-                response.raise_for_status()
-                return response.json()
 
-            except httpx.HTTPStatusError as e:
+                # Handle different error codes specifically
+                if response.status_code == 429:
+                    # Rate limit handling
+                    retry_after = int(
+                        response.headers.get(
+                            "Retry-After", self.config.backoff_factor * 2
+                        )
+                    )
+                    logger.warning(f"Rate limited, waiting {retry_after}s before retry")
+                    await asyncio.sleep(retry_after)
+                    continue
+
+                elif response.status_code == 401:
+                    raise DetectorAuthError(f"Authentication failed: {response.text}")
+
+                elif response.status_code == 503:
+                    # Service unavailable - return informative error if this is our last retry
+                    if attempt == self.config.max_retries - 1:
+                        error_details = {
+                            "timestamp": datetime.datetime.now().isoformat(),
+                            "service": urlparse(url).netloc,
+                            "detector_id": self.config.detector_id,
+                            "retries_attempted": self.config.max_retries,
+                            "status_code": 503,
+                        }
+
+                        logger.error(
+                            f"Service unavailable after {self.config.max_retries} attempts: "
+                            f"{error_details['service']} for detector {self.config.detector_id}"
+                        )
+
+                        raise DetectorNetworkError(
+                            f"Safety service is currently unavailable. The system attempted {self.config.max_retries}"
+                            f"retries but couldn't connect to {error_details['service']}. Please try again "
+                            f"later or contact your administrator if the problem persists."
+                        )
+
+                    # Continue with backoff if we have more retries
+                    logger.warning(
+                        f"Service unavailable (attempt {attempt+1}/{self.config.max_retries}), retrying..."
+                    )
+                else:
+                    # SUCCESS PATH: Return immediately for successful responses
+                    response.raise_for_status()
+                    return response.json()
+
+            except httpx.TimeoutException as e:
                 logger.error(
-                    f"HTTP error occurred (attempt {attempt + 1}/{self.MAX_RETRIES}): {e.response.text}"
+                    f"Request timed out (attempt {attempt + 1}/{self.config.max_retries})"
                 )
-                if attempt == self.MAX_RETRIES - 1:
-                    raise DetectorRequestError(
-                        f"API Error after {self.MAX_RETRIES} attempts: {e.response.text}"
+                if attempt == self.config.max_retries - 1:
+                    raise DetectorTimeoutError(
+                        f"Request timed out after {self.config.max_retries} attempts"
                     ) from e
 
-            except httpx.RequestError as e:
+            except httpx.HTTPStatusError as e:
+                # More specific error handling based on status code
                 logger.error(
-                    f"Request error occurred (attempt {attempt + 1}/{self.MAX_RETRIES}): {str(e)}"
+                    f"HTTP error {e.response.status_code} (attempt {attempt + 1}/{self.config.max_retries}): {e.response.text}"
                 )
-                if attempt == self.MAX_RETRIES - 1:
+                if attempt == self.config.max_retries - 1:
                     raise DetectorRequestError(
-                        f"Request Error after {self.MAX_RETRIES} attempts: {str(e)}"
+                        f"API Error after {self.config.max_retries} attempts: {e.response.text}"
                     ) from e
 
             # Exponential backoff
-            await asyncio.sleep(self.BACKOFF_FACTOR**attempt)
+            jitter = random.uniform(0.8, 1.2)
+            await asyncio.sleep((self.config.backoff_factor**attempt) * jitter)
 
     def _process_detection(
         self, detection: Dict[str, Any]
@@ -543,17 +684,42 @@ class SimpleShieldStore(ShieldStore):
                 f"Shield store {self._store_id} creating shield for {identifier} using config"
             )
 
-            # Extract detector params properly
+            # Extract detector params with full support for all structures
             detector_params = {}
-            if hasattr(config, "detector_params") and config.detector_params:
-                detector_params = {
-                    k: v
-                    for k, v in vars(config.detector_params).items()
-                    if v is not None and k != "detectors"  # Exclude detectors field
-                }
-                # Handle orchestrator mode
-                if config.detector_params.detectors:
+
+            # NEW STRUCTURE: Check for top-level detectors first
+            if hasattr(config, "detectors") and config.detectors:
+                detector_params = {"detectors": {}}
+                for det_id, det_config in config.detectors.items():
+                    detector_params["detectors"][det_id] = det_config.get(
+                        "detector_params", {}
+                    )
+
+            # LEGACY STRUCTURES: Handle detector_params variations
+            elif hasattr(config, "detector_params") and config.detector_params:
+                # Check for generic parameter containers first
+                for param_key in ["model_params", "kwargs", "metadata"]:
+                    if hasattr(config.detector_params, param_key):
+                        generic_params = getattr(config.detector_params, param_key)
+                        if generic_params:
+                            detector_params = {param_key: generic_params}
+                            break
+
+                # If no generic containers, check for detectors object
+                if (
+                    not detector_params
+                    and hasattr(config.detector_params, "detectors")
+                    and config.detector_params.detectors
+                ):
                     detector_params = {"detectors": config.detector_params.detectors}
+
+                # If still empty, extract flat params
+                if not detector_params:
+                    detector_params = {
+                        k: v
+                        for k, v in vars(config.detector_params).items()
+                        if v is not None and k != "detectors"
+                    }
 
             # Create shield with all required fields
             shield = Shield(
@@ -563,7 +729,7 @@ class SimpleShieldStore(ShieldStore):
                 type="shield",
                 name=f"{identifier} Shield",
                 description=f"Safety shield for {identifier}",
-                params=detector_params,  # Use extracted params
+                params=detector_params,
                 metadata={
                     "detector_type": "content" if not config.is_chat else "chat",
                     "message_types": list(config.message_types),
@@ -663,25 +829,102 @@ class DetectorProvider(Safety, Shields):
         try:
             # First register all configurations if supported
             if hasattr(self._shield_store, "register_detector_config"):
+                # Process these in parallel
+                tasks = []
                 for config_id, config in self._pending_configs:
-                    await self._shield_store.register_detector_config(config_id, config)
+                    tasks.append(
+                        self._shield_store.register_detector_config(config_id, config)
+                    )
+
+                if tasks:
+                    await asyncio.gather(*tasks)
             else:
                 logger.debug(
                     f"Provider {self._provider_id} shield store doesn't support register_detector_config"
                 )
 
-            # Clear pending configs regardless
+            # Clear pending configs
             self._pending_configs.clear()
 
-            # Initialize detectors
+            # Initialize detectors in parallel with controlled concurrency
+            detector_init_tasks = []
             for detector in self.detectors.values():
-                await detector.initialize()
+                detector_init_tasks.append(detector.initialize())
+
+            if detector_init_tasks:
+                await asyncio.gather(*detector_init_tasks)
+
+            shields_to_register = []
 
             # Create shields directly without relying on shield store methods
             for detector in self.detectors.values():
                 config_id = detector.config.detector_id
+                detector_params = {}
 
-                # Create shield with properties we know are needed
+                # NEW STRUCTURE: Check for top-level detectors first
+                if hasattr(detector.config, "detectors") and detector.config.detectors:
+                    detector_params = {"detectors": {}}
+                    for det_id, det_config in detector.config.detectors.items():
+                        detector_params["detectors"][det_id] = det_config.get(
+                            "detector_params", {}
+                        )
+                # LEGACY STRUCTURES: Handle detector_params variations
+                elif (
+                    hasattr(detector.config, "detector_params")
+                    and detector.config.detector_params
+                ):
+                    # Create flat_params by extracting from all containers
+                    flat_params = {}
+
+                    # Extract parameters from model_params, metadata, kwargs containers
+                    if hasattr(detector.config.detector_params, "model_params"):
+                        flat_params.update(detector.config.detector_params.model_params)
+
+                    if hasattr(detector.config.detector_params, "metadata"):
+                        flat_params.update(detector.config.detector_params.metadata)
+
+                    if hasattr(detector.config.detector_params, "kwargs"):
+                        flat_params.update(detector.config.detector_params.kwargs)
+
+                    # Also include direct properties, skipping empty containers
+                    for k, v in vars(detector.config.detector_params).items():
+                        if v is not None and k not in [
+                            "detectors",
+                            "model_params",
+                            "metadata",
+                            "kwargs",
+                            "params",
+                        ]:
+                            # Skip empty dictionaries and lists
+                            if not (isinstance(v, (dict, list)) and len(v) == 0):
+                                flat_params[k] = v
+
+                    # Initialize empty detector_params
+                    detector_params = {}
+
+                    # Special handling for chat detectors
+                    if detector.config.is_chat:
+                        # Create a clean model_params dictionary with only the parameters we need
+                        model_params = {}
+
+                        # Add relevant parameters from flat_params, excluding "params"
+                        for k, v in flat_params.items():
+                            if (
+                                k != "params"
+                            ):  # Explicitly exclude the empty params dict
+                                model_params[k] = v
+
+                        # Set model_params in detector_params
+                        detector_params["model_params"] = model_params
+                    elif hasattr(detector.config.detector_params, "detectors"):
+                        # Handle composite detectors
+                        detector_params["detectors"] = (
+                            detector.config.detector_params.detectors
+                        )
+                    else:
+                        # For non-chat detectors, use params as-is
+                        detector_params = flat_params
+
                 shield = Shield(
                     identifier=config_id,
                     provider_id="fms-safety",
@@ -689,7 +932,7 @@ class DetectorProvider(Safety, Shields):
                     type="shield",
                     name=f"{config_id} Shield",
                     description=f"Safety shield for {config_id}",
-                    params={},  # Will be populated based on detector config
+                    params=detector_params,
                     metadata={
                         "detector_type": (
                             "content" if not detector.config.is_chat else "chat"
@@ -698,28 +941,47 @@ class DetectorProvider(Safety, Shields):
                         "confidence_threshold": detector.config.confidence_threshold,
                     },
                 )
-
-                # Add detector parameters if available
-                if (
-                    hasattr(detector.config, "detector_params")
-                    and detector.config.detector_params
+                # Special handling for different detector configurations
+                if detector.config.is_chat:
+                    # Chat detectors already work correctly - no changes needed
+                    pass
+                elif (
+                    hasattr(detector.config.detector_params, "detectors")
+                    and detector.config.detector_params.detectors
                 ):
-                    if (
-                        hasattr(detector.config.detector_params, "detectors")
-                        and detector.config.detector_params.detectors
-                    ):
-                        shield.params = {
-                            "detectors": detector.config.detector_params.detectors
-                        }
-                    else:
-                        shield.params = {
-                            k: v
-                            for k, v in vars(detector.config.detector_params).items()
-                            if v is not None and k != "detectors"
-                        }
+                    # Orchestrator configuration with multiple detectors
+                    nested_detectors = {}
+
+                    # Access the detectors through detector_params where they're actually stored
+                    for (
+                        det_id,
+                        det_config,
+                    ) in detector.config.detector_params.detectors.items():
+                        # Extract detector parameters if present
+                        if (
+                            "detector_params" in det_config
+                            and det_config["detector_params"]
+                        ):
+                            nested_detectors[det_id] = det_config["detector_params"]
+
+                    # Set structured parameters
+                    if nested_detectors:
+                        shield.params = {"detectors": nested_detectors}
+
+                elif detector.config.detector_params:
+                    # Standard content detector with direct parameters
+                    shield.params = (
+                        detector.config.detector_params.to_categorized_dict()
+                    )
 
                 self._shields[config_id] = shield
-                await detector.register_shield(shield)
+            # Register shields in parallel
+            register_tasks = []
+            for detector, shield in shields_to_register:
+                register_tasks.append(detector.register_shield(shield))
+
+            if register_tasks:
+                await asyncio.gather(*register_tasks)
 
             self._initialized = True
             logger.info(
@@ -890,19 +1152,20 @@ class DetectorProvider(Safety, Shields):
                 and detector.config.detector_params.detectors is not None
             )
 
-            # Step 6: Process each message
-            for _idx, (orig_idx, message) in enumerate(filtered_messages):
-                current_result = {
-                    "message_index": orig_idx,
-                    "text": message.content,
-                    "status": "pass",
-                    "score": None,
-                    "detection_type": None,
-                }
+            # Step 6: Process messages in parallel
+            if is_composite:
+                # Define function to process composite detector message
+                async def process_composite_message(orig_idx, message):
+                    try:
+                        current_result = {
+                            "message_index": orig_idx,
+                            "text": message.content,
+                            "status": "pass",
+                            "score": None,
+                            "detection_type": None,
+                        }
 
-                try:
-                    if is_composite:
-                        # Step 6a: Handle composite detector
+                        # Make API request for this message
                         request = detector._prepare_request_payload([message], params)
                         response = await detector._make_request(request)
                         detections = response.get("detections", [])
@@ -961,24 +1224,83 @@ class DetectorProvider(Safety, Shields):
                         current_result["individual_detector_results"] = (
                             individual_results
                         )
-                        total_detections += message_detections
 
-                        if message_has_violation:
-                            has_violation = True
-                            if message_highest_score > highest_violation_score:
-                                highest_violation_score = message_highest_score
+                        return {
+                            "result": current_result,
+                            "has_violation": message_has_violation,
+                            "highest_score": message_highest_score,
+                            "detections": message_detections,
+                        }
+                    except Exception as e:
+                        logger.error(
+                            f"Message processing failed for message {orig_idx}: {e}"
+                        )
+                        return {
+                            "result": {
+                                "message_index": orig_idx,
+                                "text": message.content if message else "",
+                                "status": "error",
+                                "error": str(e),
+                            },
+                            "has_violation": False,
+                            "highest_score": 0.0,
+                            "detections": 0,
+                            "error": str(e),
+                        }
 
-                    else:
-                        # Step 6b: Handle non-composite detector
+                # Create tasks for all messages with controlled concurrency
+                # Use semaphore to limit concurrent API calls
+                semaphore = asyncio.Semaphore(detector.config.max_concurrency)
+
+                async def process_with_semaphore(orig_idx, message):
+                    async with semaphore:
+                        return await process_composite_message(orig_idx, message)
+
+                # Create and execute tasks
+                tasks = [
+                    process_with_semaphore(orig_idx, message)
+                    for orig_idx, message in filtered_messages
+                ]
+
+                # Await all tasks
+                task_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Process results
+                for result in task_results:
+                    if isinstance(result, Exception):
+                        # Handle unexpected exceptions
+                        logger.error(f"Task execution failed: {result}")
+                        continue
+
+                    # Extract data
+                    message_results.append(result["result"])
+
+                    # Update aggregate metrics
+                    if result["has_violation"]:
+                        has_violation = True
+                        total_detections += result["detections"]
+                        if result["highest_score"] > highest_violation_score:
+                            highest_violation_score = result["highest_score"]
+
+            else:
+                # For non-composite detectors
+                async def process_standard_message(orig_idx, message):
+                    try:
+                        current_result = {
+                            "message_index": orig_idx,
+                            "text": message.content,
+                            "status": "pass",
+                            "score": None,
+                            "detection_type": None,
+                        }
+
+                        # Make API request for this message
                         response = await detector._run_shield_impl(
                             shield_id, [message], params
                         )
+
                         if response.violation:
-                            has_violation = True
-                            total_detections += 1
                             score = response.violation.metadata.get("score")
-                            if score and score > highest_violation_score:
-                                highest_violation_score = score
                             current_result.update(
                                 {
                                     "status": "violation",
@@ -989,22 +1311,68 @@ class DetectorProvider(Safety, Shields):
                                 }
                             )
 
-                    message_results.append(current_result)
+                            return {
+                                "result": current_result,
+                                "has_violation": True,
+                                "highest_score": score or 0.0,
+                                "detections": 1,
+                            }
 
-                except Exception as e:
-                    logger.error(f"Message processing failed: {e}")
-                    return RunShieldResponse(
-                        violation=SafetyViolation(
-                            violation_level=ViolationLevel.ERROR,
-                            user_message=f"Message processing failed: {str(e)}",
-                            metadata={
+                        return {
+                            "result": current_result,
+                            "has_violation": False,
+                            "highest_score": 0.0,
+                            "detections": 0,
+                        }
+                    except Exception as e:
+                        logger.error(
+                            f"Message processing failed for message {orig_idx}: {e}"
+                        )
+                        return {
+                            "result": {
+                                "message_index": orig_idx,
+                                "text": message.content if message else "",
                                 "status": "error",
-                                "error_type": "processing_error",
-                                "shield_id": shield_id,
                                 "error": str(e),
                             },
-                        )
-                    )
+                            "has_violation": False,
+                            "highest_score": 0.0,
+                            "detections": 0,
+                            "error": str(e),
+                        }
+
+                # Create tasks with controlled concurrency
+                semaphore = asyncio.Semaphore(detector.config.max_concurrency)
+
+                async def process_with_semaphore(orig_idx, message):
+                    async with semaphore:
+                        return await process_standard_message(orig_idx, message)
+
+                # Create and execute tasks
+                tasks = [
+                    process_with_semaphore(orig_idx, message)
+                    for orig_idx, message in filtered_messages
+                ]
+
+                # Await all tasks
+                task_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # Process results
+                for result in task_results:
+                    if isinstance(result, Exception):
+                        # Handle unexpected exceptions
+                        logger.error(f"Task execution failed: {result}")
+                        continue
+
+                    # Extract data
+                    message_results.append(result["result"])
+
+                    # Update aggregate metrics
+                    if result["has_violation"]:
+                        has_violation = True
+                        total_detections += result["detections"]
+                        if result["highest_score"] > highest_violation_score:
+                            highest_violation_score = result["highest_score"]
 
             # Step 7: Calculate summary statistics
             total_filtered = len(filtered_messages)

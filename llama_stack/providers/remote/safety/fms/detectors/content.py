@@ -30,26 +30,6 @@ class ContentDetectorError(DetectorError):
     pass
 
 
-@dataclass(frozen=True)
-class ContentDetectionMetadata:
-    """Structured metadata for content detections"""
-
-    allow_list_match: Optional[str] = None
-    block_list_match: Optional[str] = None
-    additional_metadata: Optional[Dict[str, Any]] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert metadata to dictionary format"""
-        result = {}
-        if self.allow_list_match:
-            result["allow_list_match"] = self.allow_list_match
-        if self.block_list_match:
-            result["block_list_match"] = self.block_list_match
-        if self.additional_metadata:
-            result["metadata"] = self.additional_metadata
-        return result
-
-
 class ContentDetector(BaseDetector):
     """Detector for content-based safety checks"""
 
@@ -64,13 +44,12 @@ class ContentDetector(BaseDetector):
         logger.info(f"Initialized ContentDetector with config: {vars(config)}")
 
     def _extract_detector_params(self) -> Dict[str, Any]:
-        """Extract non-null detector parameters"""
+        """Extract detector parameters with support for generic format"""
         if not self.config.detector_params:
             return {}
 
-        params = {
-            k: v for k, v in vars(self.config.detector_params).items() if v is not None
-        }
+        # Use to_dict() to flatten our categorized structure into what the API expects
+        params = self.config.detector_params.to_dict()
         logger.debug(f"Extracted detector params: {params}")
         return params
 
@@ -78,25 +57,43 @@ class ContentDetector(BaseDetector):
         self, content: str, params: Optional[Dict[str, Any]] = None
     ) -> ContentRequest:
         """Prepare the request based on API mode"""
-        detector_params = self._extract_detector_params()
 
         if self.config.use_orchestrator_api:
-            # Use detectors configuration directly from detector_params if available
-            if (
-                hasattr(self.config.detector_params, "detectors")
-                and self.config.detector_params.detectors
-            ):
-                return {
-                    "detectors": self.config.detector_params.detectors,
-                    "content": content,
-                }
+            payload = {"content": content}  # Always use singular form
 
-        # Fallback to legacy format
-        detector_params = self._extract_detector_params()
-        return {
-            "contents": [content],
-            "detector_params": detector_params if detector_params else params or {},
-        }
+            # NEW STRUCTURE: Check for top-level detectors first
+            if hasattr(self.config, "detectors") and self.config.detectors:
+                detector_config = {}
+                for detector_id, det_config in self.config.detectors.items():
+                    detector_config[detector_id] = det_config.get("detector_params", {})
+                payload["detectors"] = detector_config
+                return payload
+
+            # LEGACY STRUCTURE: Check for nested detectors
+            elif self.config.detector_params and hasattr(
+                self.config.detector_params, "detectors"
+            ):
+                payload["detectors"] = self.config.detector_params.detectors
+                return payload
+
+            # Handle flat params
+            else:
+                detector_config = {}
+                detector_params = self._extract_detector_params()
+                if detector_params:
+                    detector_config[self.config.detector_id] = detector_params
+                payload["detectors"] = detector_config
+                return payload
+
+        else:
+            # DIRECT MODE: Use flat parameters for API compatibility
+            # Don't use generic containers for direct mode APIs
+            detector_params = self._extract_detector_params()
+
+            return {
+                "contents": [content],
+                "detector_params": detector_params if detector_params else params or {},
+            }
 
     def _extract_detections(self, response: Dict[str, Any]) -> DetectorResponse:
         """Extract detections from API response"""
@@ -152,12 +149,6 @@ class ContentDetector(BaseDetector):
 
         score = detection.get("score", 0)
         if score > self.score_threshold:
-            metadata = ContentDetectionMetadata(
-                allow_list_match=detection.get("allow_list_match"),
-                block_list_match=detection.get("block_list_match"),
-                additional_metadata=detection.get("metadata"),
-            )
-
             return DetectionResult(
                 detection="Yes",
                 detection_type=detection["detection_type"],
@@ -166,7 +157,7 @@ class ContentDetector(BaseDetector):
                 text=detection.get("text", ""),
                 start=detection.get("start", 0),
                 end=detection.get("end", 0),
-                metadata=metadata.to_dict(),
+                metadata=detection.get("metadata", {}),
             )
         return None
 
