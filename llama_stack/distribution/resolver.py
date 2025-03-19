@@ -7,7 +7,6 @@ import importlib
 import inspect
 from typing import Any, Dict, List, Set, Tuple
 
-from llama_stack import logcat
 from llama_stack.apis.agents import Agents
 from llama_stack.apis.benchmarks import Benchmarks
 from llama_stack.apis.datasetio import DatasetIO
@@ -17,6 +16,7 @@ from llama_stack.apis.inference import Inference
 from llama_stack.apis.inspect import Inspect
 from llama_stack.apis.models import Models
 from llama_stack.apis.post_training import PostTraining
+from llama_stack.apis.providers import Providers as ProvidersAPI
 from llama_stack.apis.safety import Safety
 from llama_stack.apis.scoring import Scoring
 from llama_stack.apis.scoring_functions import ScoringFunctions
@@ -35,6 +35,7 @@ from llama_stack.distribution.datatypes import (
 from llama_stack.distribution.distribution import builtin_automatically_routed_apis
 from llama_stack.distribution.store import DistributionRegistry
 from llama_stack.distribution.utils.dynamic import instantiate_class_type
+from llama_stack.log import get_logger
 from llama_stack.providers.datatypes import (
     Api,
     BenchmarksProtocolPrivate,
@@ -50,6 +51,8 @@ from llama_stack.providers.datatypes import (
     VectorDBsProtocolPrivate,
 )
 
+logger = get_logger(name=__name__, category="core")
+
 
 class InvalidProviderError(Exception):
     pass
@@ -57,6 +60,7 @@ class InvalidProviderError(Exception):
 
 def api_protocol_map() -> Dict[Api, Any]:
     return {
+        Api.providers: ProvidersAPI,
         Api.agents: Agents,
         Api.inference: Inference,
         Api.inspect: Inspect,
@@ -163,7 +167,9 @@ def specs_for_autorouted_apis(apis_to_serve: List[str] | Set[str]) -> Dict[str, 
                     module="llama_stack.distribution.routers",
                     routing_table_api=info.routing_table_api,
                     api_dependencies=[info.routing_table_api],
-                    deps__=[info.routing_table_api.value],
+                    # Add telemetry as an optional dependency to all auto-routed providers
+                    optional_api_dependencies=[Api.telemetry],
+                    deps__=([info.routing_table_api.value, Api.telemetry.value]),
                 ),
             )
         }
@@ -184,7 +190,7 @@ def validate_and_prepare_providers(
         specs = {}
         for provider in providers:
             if not provider.provider_id or provider.provider_id == "__disabled__":
-                logcat.warning("core", f"Provider `{provider.provider_type}` for API `{api}` is disabled")
+                logger.warning(f"Provider `{provider.provider_type}` for API `{api}` is disabled")
                 continue
 
             validate_provider(provider, api, provider_registry)
@@ -206,11 +212,10 @@ def validate_provider(provider: Provider, api: Api, provider_registry: ProviderR
 
     p = provider_registry[api][provider.provider_type]
     if p.deprecation_error:
-        logcat.error("core", p.deprecation_error)
+        logger.error(p.deprecation_error)
         raise InvalidProviderError(p.deprecation_error)
     elif p.deprecation_warning:
-        logcat.warning(
-            "core",
+        logger.warning(
             f"Provider `{provider.provider_type}` for API `{api}` is deprecated and will be removed in a future release: {p.deprecation_warning}",
         )
 
@@ -244,9 +249,29 @@ def sort_providers_by_deps(
         )
     )
 
-    logcat.debug("core", f"Resolved {len(sorted_providers)} providers")
+    sorted_providers.append(
+        (
+            "providers",
+            ProviderWithSpec(
+                provider_id="__builtin__",
+                provider_type="__builtin__",
+                config={"run_config": run_config.model_dump()},
+                spec=InlineProviderSpec(
+                    api=Api.providers,
+                    provider_type="__builtin__",
+                    config_class="llama_stack.distribution.providers.ProviderImplConfig",
+                    module="llama_stack.distribution.providers",
+                    api_dependencies=apis,
+                    deps__=[x.value for x in apis],
+                ),
+            ),
+        )
+    )
+
+    logger.debug(f"Resolved {len(sorted_providers)} providers")
     for api_str, provider in sorted_providers:
-        logcat.debug("core", f" {api_str} => {provider.provider_id}")
+        logger.debug(f" {api_str} => {provider.provider_id}")
+        logger.debug("")
     return sorted_providers
 
 
@@ -387,7 +412,7 @@ def check_protocol_compliance(obj: Any, protocol: Any) -> None:
                 obj_params = set(obj_sig.parameters)
                 obj_params.discard("self")
                 if not (proto_params <= obj_params):
-                    logcat.error("core", f"Method {name} incompatible proto: {proto_params} vs. obj: {obj_params}")
+                    logger.error(f"Method {name} incompatible proto: {proto_params} vs. obj: {obj_params}")
                     missing_methods.append((name, "signature_mismatch"))
                 else:
                     # Check if the method is actually implemented in the class

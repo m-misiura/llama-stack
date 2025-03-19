@@ -117,6 +117,21 @@ class Provider(BaseModel):
     config: Dict[str, Any]
 
 
+class LoggingConfig(BaseModel):
+    category_levels: Dict[str, str] = Field(
+        default_factory=Dict,
+        description="""
+ Dictionary of different logging configurations for different portions (ex: core, server) of llama stack""",
+    )
+
+
+class AuthenticationConfig(BaseModel):
+    endpoint: str = Field(
+        ...,
+        description="Endpoint URL to validate authentication tokens",
+    )
+
+
 class ServerConfig(BaseModel):
     port: int = Field(
         default=8321,
@@ -131,6 +146,10 @@ class ServerConfig(BaseModel):
     tls_keyfile: Optional[str] = Field(
         default=None,
         description="Path to TLS key file for HTTPS",
+    )
+    auth: Optional[AuthenticationConfig] = Field(
+        default=None,
+        description="Authentication configuration for the server",
     )
 
 
@@ -175,6 +194,8 @@ a default SQLite store will be used.""",
     scoring_fns: List[ScoringFnInput] = Field(default_factory=list)
     benchmarks: List[BenchmarkInput] = Field(default_factory=list)
     tool_groups: List[ToolGroupInput] = Field(default_factory=list)
+
+    logging: Optional[LoggingConfig] = Field(default=None, description="Configuration for Llama Stack Logging")
 
     server: ServerConfig = Field(
         default_factory=ServerConfig,

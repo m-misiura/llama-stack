@@ -61,14 +61,20 @@ outlined on that page and do not file a public issue.
 
 We use [uv](https://github.com/astral-sh/uv) to manage python dependencies and virtual environments.
 You can install `uv` by following this [guide](https://docs.astral.sh/uv/getting-started/installation/).
+
 You can install the dependencies by running:
 
 ```bash
-$ cd llama-stack
-$ uv sync --extra dev
-$ uv pip install -e .
-$ source .venv/bin/activate
+cd llama-stack
+uv sync --extra dev
+uv pip install -e .
+source .venv/bin/activate
 ```
+
+> [!NOTE]
+> You can pin a specific version of Python to use for `uv` by adding a `.python-version` file in the root project directory.
+> Otherwise, `uv` will automatically select a Python version according to the `requires-python` section of the `pyproject.toml`.
+> For more info, see the [uv docs around Python versions](https://docs.astral.sh/uv/concepts/python-versions/).
 
 Note that you can create a dotenv file `.env` that includes necessary environment variables:
 ```
@@ -80,7 +86,7 @@ LLAMA_STACK_CONFIG=
 
 And then use this dotenv file when running client SDK tests via the following:
 ```bash
-$ uv run --env-file .env -- pytest -v tests/api/inference/test_text_inference.py
+uv run --env-file .env -- pytest -v tests/integration/inference/test_text_inference.py
 ```
 
 ## Pre-commit Hooks
@@ -88,7 +94,7 @@ $ uv run --env-file .env -- pytest -v tests/api/inference/test_text_inference.py
 We use [pre-commit](https://pre-commit.com/) to run linting and formatting checks on your code. You can install the pre-commit hooks by running:
 
 ```bash
-$ uv run pre-commit install
+uv run pre-commit install
 ```
 
 After that, pre-commit hooks will run automatically before each commit.
@@ -96,19 +102,35 @@ After that, pre-commit hooks will run automatically before each commit.
 Alternatively, if you don't want to install the pre-commit hooks, you can run the checks manually by running:
 
 ```bash
-$ uv run pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
 > [!CAUTION]
 > Before pushing your changes, make sure that the pre-commit hooks have passed successfully.
+
+## Running unit tests
+
+You can run the unit tests by running:
+
+```bash
+source .venv/bin/activate
+./scripts/unit-tests.sh
+```
+
+If you'd like to run for a non-default version of Python (currently 3.10), pass `PYTHON_VERSION` variable as follows:
+
+```
+source .venv/bin/activate
+PYTHON_VERSION=3.13 ./scripts/unit-tests.sh
+```
 
 ## Adding a new dependency to the project
 
 To add a new dependency to the project, you can use the `uv` command. For example, to add `foo` to the project, you can run:
 
 ```bash
-$ uv add foo
-$ uv sync
+uv add foo
+uv sync
 ```
 
 ## Coding Style
@@ -127,31 +149,31 @@ Building a stack image (conda / docker) will use the production version of the `
 
 Example:
 ```bash
-$ cd work/
-$ git clone https://github.com/meta-llama/llama-stack.git
-$ git clone https://github.com/meta-llama/llama-stack-client-python.git
-$ cd llama-stack
-$ LLAMA_STACK_DIR=$(pwd) LLAMA_STACK_CLIENT_DIR=../llama-stack-client-python llama stack build --template <...>
+cd work/
+git clone https://github.com/meta-llama/llama-stack.git
+git clone https://github.com/meta-llama/llama-stack-client-python.git
+cd llama-stack
+LLAMA_STACK_DIR=$(pwd) LLAMA_STACK_CLIENT_DIR=../llama-stack-client-python llama stack build --template <...>
 ```
 
 
 ### Updating Provider Configurations
 
-If you have made changes to a provider's configuration in any form (introducing a new config key, or changing models, etc.), you should run `python llama_stack/scripts/distro_codegen.py` to re-generate various YAML files as well as the documentation. You should not change `docs/source/.../distributions/` files manually as they are auto-generated.
+If you have made changes to a provider's configuration in any form (introducing a new config key, or changing models, etc.), you should run `./scripts/distro_codegen.py` to re-generate various YAML files as well as the documentation. You should not change `docs/source/.../distributions/` files manually as they are auto-generated.
 
 ### Building the Documentation
 
 If you are making changes to the documentation at [https://llama-stack.readthedocs.io/en/latest/](https://llama-stack.readthedocs.io/en/latest/), you can use the following command to build the documentation and preview your changes. You will need [Sphinx](https://www.sphinx-doc.org/en/master/) and the readthedocs theme.
 
 ```bash
-$ cd llama-stack/docs
-$ uv sync --extra docs
+cd llama-stack/docs
+uv sync --extra docs
 
 # This rebuilds the documentation pages.
-$ uv run make html
+uv run make html
 
 # This will start a local server (usually at http://127.0.0.1:8000) that automatically rebuilds and refreshes when you make changes to the documentation.
-$ uv run sphinx-autobuild source build/html --write-all
+uv run sphinx-autobuild source build/html --write-all
 ```
 
 ### Update API Documentation
@@ -159,8 +181,7 @@ $ uv run sphinx-autobuild source build/html --write-all
 If you modify or add new API endpoints, update the API documentation accordingly. You can do this by running the following command:
 
 ```bash
-$ uv sync --extra dev
-$ uv run ./docs/openapi_generator/run_openapi_generator.sh
+uv run --with ".[dev]" ./docs/openapi_generator/run_openapi_generator.sh
 ```
 
 The generated API documentation will be available in `docs/_static/`. Make sure to review the changes before committing.

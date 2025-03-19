@@ -5,6 +5,8 @@
 # the root directory of this source tree.
 
 
+import os
+
 import pytest
 from pydantic import BaseModel
 
@@ -17,6 +19,7 @@ PROVIDER_LOGPROBS_TOP_K = {"remote::together", "remote::fireworks", "remote::vll
 
 def skip_if_model_doesnt_support_completion(client_with_models, model_id):
     models = {m.identifier: m for m in client_with_models.models.list()}
+    models.update({m.provider_resource_id: m for m in client_with_models.models.list()})
     provider_id = models[model_id].provider_id
     providers = {p.provider_id: p for p in client_with_models.providers.list()}
     provider = providers[provider_id]
@@ -39,6 +42,15 @@ def get_llama_model(client_with_models, model_id):
             return mid
 
     return model.metadata.get("llama_model", None)
+
+
+def get_llama_tokenizer():
+    from llama_models.llama3.api.chat_format import ChatFormat
+    from llama_models.llama3.api.tokenizer import Tokenizer
+
+    tokenizer = Tokenizer.get_instance()
+    formatter = ChatFormat(tokenizer)
+    return tokenizer, formatter
 
 
 @pytest.mark.parametrize(
@@ -210,6 +222,40 @@ def test_text_chat_completion_non_streaming(client_with_models, text_model_id, t
     message_content = response.completion_message.content.lower().strip()
     assert len(message_content) > 0
     assert expected.lower() in message_content
+
+
+@pytest.mark.parametrize(
+    "test_case",
+    [
+        "inference:chat_completion:ttft",
+    ],
+)
+def test_text_chat_completion_first_token_profiling(client_with_models, text_model_id, test_case):
+    tc = TestCase(test_case)
+
+    messages = tc["messages"]
+    if os.environ.get("DEBUG_TTFT"):  # debugging print number of tokens in input, ideally around 800
+        from pydantic import TypeAdapter
+
+        from llama_stack.apis.inference import Message
+
+        tokenizer, formatter = get_llama_tokenizer()
+        typed_messages = [TypeAdapter(Message).validate_python(m) for m in messages]
+        encoded = formatter.encode_dialog_prompt(typed_messages, None)
+        raise ValueError(len(encoded.tokens) if encoded and encoded.tokens else 0)
+
+    response = client_with_models.inference.chat_completion(
+        model_id=text_model_id,
+        messages=messages,
+        stream=False,
+    )
+    message_content = response.completion_message.content.lower().strip()
+    assert len(message_content) > 0
+
+    if os.environ.get("DEBUG_TTFT"):  # debugging print number of tokens in response, ideally around 150
+        tokenizer, formatter = get_llama_tokenizer()
+        encoded = formatter.encode_content(message_content)
+        raise ValueError(len(encoded.tokens) if encoded and encoded.tokens else 0)
 
 
 @pytest.mark.parametrize(

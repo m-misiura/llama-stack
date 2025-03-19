@@ -29,27 +29,6 @@ def available_providers() -> List[ProviderSpec]:
         ),
         InlineProviderSpec(
             api=Api.safety,
-            provider_type="inline::meta-reference",
-            pip_packages=[
-                "transformers",
-                "torch --index-url https://download.pytorch.org/whl/cpu",
-            ],
-            module="llama_stack.providers.inline.safety.meta_reference",
-            config_class="llama_stack.providers.inline.safety.meta_reference.SafetyConfig",
-            api_dependencies=[
-                Api.inference,
-            ],
-            deprecation_error="""
-Provider `inline::meta-reference` for API `safety` does not work with the latest Llama Stack.
-
-- if you are using Llama Guard v3, please use the `inline::llama-guard` provider instead.
-- if you are using Prompt Guard, please use the `inline::prompt-guard` provider instead.
-- if you are using Code Scanner, please use the `inline::code-scanner` provider instead.
-
-            """,
-        ),
-        InlineProviderSpec(
-            api=Api.safety,
             provider_type="inline::llama-guard",
             pip_packages=[],
             module="llama_stack.providers.inline.safety.llama_guard",
@@ -70,15 +49,6 @@ Provider `inline::meta-reference` for API `safety` does not work with the latest
         remote_provider_spec(
             api=Api.safety,
             adapter=AdapterSpec(
-                adapter_type="sample",
-                pip_packages=[],
-                module="llama_stack.providers.remote.safety.sample",
-                config_class="llama_stack.providers.remote.safety.sample.SampleConfig",
-            ),
-        ),
-        remote_provider_spec(
-            api=Api.safety,
-            adapter=AdapterSpec(
                 adapter_type="bedrock",
                 pip_packages=["boto3"],
                 module="llama_stack.providers.remote.safety.bedrock",
@@ -88,10 +58,10 @@ Provider `inline::meta-reference` for API `safety` does not work with the latest
         remote_provider_spec(
             api=Api.safety,
             adapter=AdapterSpec(
-                adapter_type="fms",
-                pip_packages=[],
-                module="llama_stack.providers.remote.safety.fms",
-                config_class="llama_stack.providers.remote.safety.fms.config.FMSSafetyProviderConfig",
+                adapter_type="nvidia",
+                pip_packages=["requests"],
+                module="llama_stack.providers.remote.safety.nvidia",
+                config_class="llama_stack.providers.remote.safety.nvidia.NVIDIASafetyConfig",
             ),
         ),
     ]
