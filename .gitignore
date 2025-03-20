@@ -1,3 +1,5 @@
+distributions/remote-vllm-fms/*
+presentations/
 .env
 __pycache__
 dist
