@@ -400,6 +400,11 @@ class BaseDetectorConfig:
         else:
             self._extra_params[key] = value
 
+    @property
+    def is_chat(self) -> bool:
+        """Default implementation, should be overridden by subclasses"""
+        return False
+
 
 @json_schema_type
 @dataclass
