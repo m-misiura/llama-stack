@@ -64,7 +64,7 @@ class DetectorParams:
     kwargs: Dict[str, Any] = field(default_factory=dict)
 
     # Store detectors directly as an attribute (not in params) for orchestrator mode
-    detectors: Optional[Dict[str, Dict[str, Any]]] = None
+    _raw_detectors: Optional[Dict[str, Dict[str, Any]]] = None
 
     # Standard parameters kept for backward compatibility
     @property
@@ -128,6 +128,32 @@ class DetectorParams:
 
         return flattened
 
+    @property
+    def formatted_detectors(self) -> Optional[Dict[str, Dict[str, Any]]]:
+        """Return detectors properly formatted for orchestrator API"""
+        # Direct return for API usage - avoid calling other properties
+        if hasattr(self, "_detectors") and self._detectors:
+            return self.orchestrator_detectors
+        return None
+
+    @formatted_detectors.setter
+    def formatted_detectors(self, value: Dict[str, Dict[str, Any]]) -> None:
+        self._detectors = value
+
+    @property
+    def detectors(self) -> Optional[Dict[str, Dict[str, Any]]]:
+        """COMPATIBILITY: Returns the same as formatted_detectors to maintain API compatibility"""
+        # Using a different implementation to avoid the redefinition error
+        # while maintaining the same functionality
+        if not hasattr(self, "_detectors") or not self._detectors:
+            return None
+        return self.orchestrator_detectors
+
+    @detectors.setter
+    def detectors(self, value: Dict[str, Dict[str, Any]]) -> None:
+        """COMPATIBILITY: Set detectors while maintaining compatibility"""
+        self._detectors = value
+
     # And fix the __setitem__ method:
     def __setitem__(self, key: str, value: Any) -> None:
         """Allow dictionary-like assignment with smart categorization"""
@@ -157,11 +183,11 @@ class DetectorParams:
         self.model_params = {}
         self.metadata = {}
         self.kwargs = {}
-        self.detectors = None
+        self._raw_detectors = None
 
         # Special handling for nested detectors structure
         if "detectors" in kwargs:
-            self.detectors = kwargs.pop("detectors")
+            self._raw_detectors = kwargs.pop("detectors")
 
         # Special handling for regex
         if "regex" in kwargs:
