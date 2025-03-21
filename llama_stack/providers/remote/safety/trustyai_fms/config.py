@@ -128,18 +128,6 @@ class DetectorParams:
 
         return flattened
 
-    @property
-    def detectors(self) -> Optional[Dict[str, Dict[str, Any]]]:
-        """Return detectors properly formatted for orchestrator API"""
-        # Direct return for API usage - avoid calling other properties
-        if hasattr(self, "_detectors") and self._detectors:
-            return self.orchestrator_detectors
-        return None
-
-    @detectors.setter
-    def detectors(self, value: Dict[str, Dict[str, Any]]) -> None:
-        self._detectors = value
-
     # And fix the __setitem__ method:
     def __setitem__(self, key: str, value: Any) -> None:
         """Allow dictionary-like assignment with smart categorization"""
@@ -213,24 +201,6 @@ class DetectorParams:
         elif key in self.kwargs:
             return self.kwargs[key]
         return None
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        """Allow dictionary-like assignment with smart categorization"""
-        # Special handling for known params
-        if key == "detectors" or key == "regex":
-            self.params[key] = value
-            return
-
-        # Categorize known parameters
-        known_model_params = ["temperature", "top_p", "top_k", "max_tokens", "n"]
-        known_metadata = ["risk_name", "risk_definition", "category", "severity"]
-
-        if key in known_model_params:
-            self.model_params[key] = value
-        elif key in known_metadata:
-            self.metadata[key] = value
-        else:
-            self.kwargs[key] = value
 
     def get(self, key: str, default: Any = None) -> Any:
         """Dictionary-style get with category lookup"""
@@ -354,11 +324,7 @@ class BaseDetectorConfig:
             self.detector_params = DetectorParams()
 
         # Handle legacy URL field names
-        if (
-            hasattr(self, "base_url")
-            and self.base_url
-            and not self.detector_url
-        ):
+        if hasattr(self, "base_url") and self.base_url and not self.detector_url:
             self.detector_url = self.base_url
 
         if (

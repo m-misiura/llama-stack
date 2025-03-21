@@ -456,7 +456,9 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
                     # Service unavailable - return informative error if this is our last retry
                     if attempt == self.config.max_retries - 1:
                         error_details = {
-                            "timestamp": datetime.datetime.now().isoformat(),
+                            "timestamp": datetime.datetime.now(
+                                datetime.timezone.utc
+                            ).isoformat(),
                             "service": urlparse(url).netloc,
                             "detector_id": self.config.detector_id,
                             "retries_attempted": self.config.max_retries,
