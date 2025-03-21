@@ -356,17 +356,17 @@ class BaseDetectorConfig:
         # Handle legacy URL field names
         if (
             hasattr(self, "base_url")
-            and getattr(self, "base_url")
+            and self.base_url
             and not self.detector_url
         ):
-            self.detector_url = getattr(self, "base_url")
+            self.detector_url = self.base_url
 
         if (
             hasattr(self, "orchestrator_base_url")
-            and getattr(self, "orchestrator_base_url")
+            and self.orchestrator_base_url
             and not self.orchestrator_url
         ):
-            self.orchestrator_url = getattr(self, "orchestrator_base_url")
+            self.orchestrator_url = self.orchestrator_base_url
 
     def validate(self) -> None:
         """Validate configuration"""
