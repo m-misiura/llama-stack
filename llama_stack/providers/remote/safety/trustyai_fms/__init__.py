@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, Union
+from typing import Any, Dict, Optional, Union
 
 # Remove register_provider import since registration is in registry/safety.py
 from llama_stack.apis.safety import Safety
@@ -48,7 +48,7 @@ async def create_fms_provider(config: Dict[str, Any]) -> Safety:
 
 async def get_adapter_impl(
     config: Union[Dict[str, Any], FMSSafetyProviderConfig],
-    _deps: Dict[str, Any] = None,
+    _deps: Optional[Dict[str, Any]] = None,
 ) -> DetectorType:
     """Get appropriate detector implementation(s) based on config type.
 
@@ -72,6 +72,7 @@ async def get_adapter_impl(
 
         # Changed from provider_config.detectors to provider_config.shields
         for shield_id, shield_config in provider_config.shields.items():
+            impl: BaseDetector
             if isinstance(shield_config, ChatDetectorConfig):
                 impl = ChatDetector(shield_config)
             elif isinstance(shield_config, ContentDetectorConfig):
@@ -83,7 +84,12 @@ async def get_adapter_impl(
             await impl.initialize()
             detectors[shield_id] = impl
 
-        return DetectorProvider(detectors)
+        detectors_for_provider: Dict[str, BaseDetector] = {}
+        for shield_id, detector in detectors.items():
+            if isinstance(detector, BaseDetector):
+                detectors_for_provider[shield_id] = detector
+
+        return DetectorProvider(detectors_for_provider)
 
     except Exception as e:
         raise DetectorConfigError(
