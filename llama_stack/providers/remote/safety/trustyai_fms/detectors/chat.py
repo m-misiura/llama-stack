@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from llama_stack.apis.inference import Message
 from llama_stack.apis.safety import RunShieldResponse
@@ -16,7 +16,9 @@ from llama_stack.providers.remote.safety.trustyai_fms.detectors.base import (
 )
 
 # Type aliases for better readability
-ChatMessage = Dict[str, str]
+ChatMessage = Dict[
+    str, Any
+]  # Changed from Dict[str, str] to Dict[str, Any] to handle complex content
 ChatRequest = Dict[str, Any]
 DetectorResponse = List[Dict[str, Any]]
 
@@ -39,7 +41,7 @@ class ChatDetectionMetadata:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert metadata to dictionary format"""
-        result = {}
+        result: Dict[str, Any] = {}  # Fixed the type annotation here
         if self.risk_name:
             result["risk_name"] = self.risk_name
         if self.risk_definition:
@@ -78,19 +80,21 @@ class ChatDetector(BaseDetector):
     ) -> ChatRequest:
         """Prepare the request based on API mode"""
         # Format messages for detector API
-        formatted_messages = []
+        formatted_messages: List[Dict[str, str]] = []  # Explicitly typed
         for msg in messages:
             formatted_msg = {
-                "content": msg.get("content", ""),
+                "content": str(msg.get("content", "")),  # Ensure string type
                 "role": "user",  # Always send as user for detector API
             }
             formatted_messages.append(formatted_msg)
 
         if self.config.use_orchestrator_api:
-            payload = {"messages": formatted_messages}
+            payload: Dict[str, Any] = {
+                "messages": formatted_messages
+            }  # Explicitly typed
 
             # Initialize detector_config to avoid None
-            detector_config = {}
+            detector_config: Dict[str, Any] = {}  # Explicitly typed
 
             # NEW STRUCTURE: Check for top-level detectors first
             if hasattr(self.config, "detectors") and self.config.detectors:
@@ -212,10 +216,11 @@ class ChatDetector(BaseDetector):
             ) from e
 
     def _extract_detections(self, response: Dict[str, Any]) -> DetectorResponse:
+        """Extract detections from API response"""
         if not response:
             logger.debug("Empty response received")
             return []
-        """Extract detections from API response"""
+
         if self.config.use_orchestrator_api:
             detections = response.get("detections", [])
             if not detections:
@@ -230,7 +235,9 @@ class ChatDetector(BaseDetector):
                     }
                 ]
             logger.debug(f"Orchestrator detections: {detections}")
-            return detections
+            return cast(
+                DetectorResponse, detections
+            )  # Explicit cast to correct return type
 
         # Direct API returns a list where first item contains detections
         if isinstance(response, list) and response:
@@ -238,20 +245,21 @@ class ChatDetector(BaseDetector):
                 [response[0]] if not isinstance(response[0], list) else response[0]
             )
             logger.debug(f"Direct API detections: {detections}")
-            return detections
+            return cast(
+                DetectorResponse, detections
+            )  # Explicit cast to correct return type
 
         logger.debug("No detections found in response")
         return []
 
     def _process_detection(
         self, detection: Dict[str, Any]
-    ) -> Optional[DetectionResult]:
+    ) -> Tuple[
+        Optional[DetectionResult], float
+    ]:  # Changed return type to match base class
         """Process detection result and validate against threshold"""
-        if not detection.get("score"):
-            logger.warning("Detection missing score field")
-            return None
+        score = detection.get("score", 0.0)  # Default to 0.0 if score is missing
 
-        score = detection.get("score", 0)
         if score > self.score_threshold:
             metadata = ChatDetectionMetadata(
                 risk_name=(
@@ -267,7 +275,7 @@ class ChatDetector(BaseDetector):
                 additional_metadata=detection.get("metadata"),
             )
 
-            return DetectionResult(
+            result = DetectionResult(
                 detection="Yes",
                 detection_type=detection["detection_type"],
                 score=score,
@@ -277,7 +285,8 @@ class ChatDetector(BaseDetector):
                 end=detection.get("end", 0),
                 metadata=metadata.to_dict(),
             )
-        return None
+            return (result, score)
+        return (None, score)
 
     async def _run_shield_impl(
         self,
@@ -293,19 +302,20 @@ class ChatDetector(BaseDetector):
             logger.info(f"Processing {len(messages)} message(s)")
 
             # Convert messages keeping only necessary fields
-            chat_messages = []
+            chat_messages: List[ChatMessage] = []  # Explicitly typed
             for msg in messages:
-                message_dict = {"content": msg.content, "role": msg.role}
+                message_dict: ChatMessage = {"content": msg.content, "role": msg.role}
                 # Preserve type if present for internal processing
                 if hasattr(msg, "type"):
-                    message_dict["type"] = msg.type
+                    message_dict["type"] = getattr(msg, "type")
                 chat_messages.append(message_dict)
 
             logger.debug(f"Prepared messages: {chat_messages}")
             detections = await self._call_detector_api(chat_messages, params)
 
             for detection in detections:
-                if processed := self._process_detection(detection):
+                processed, score = self._process_detection(detection)
+                if processed:
                     logger.info(f"Violation detected: {processed}")
                     return self.create_violation_response(
                         processed, detection.get("detector_id", self.config.detector_id)
