@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
-
+from typing import Any, Dict, List, Optional, Union, cast
 from llama_stack.apis.inference import Message
 from llama_stack.apis.safety import RunShieldResponse
 from llama_stack.providers.remote.safety.trustyai_fms.config import (
@@ -58,11 +57,11 @@ class ContentDetector(BaseDetector):
         """Prepare the request based on API mode"""
 
         if self.config.use_orchestrator_api:
-            payload = {"content": content}  # Always use singular form
+            payload: Dict[str, Any] = {"content": content}  # Always use singular form
 
             # NEW STRUCTURE: Check for top-level detectors first
             if hasattr(self.config, "detectors") and self.config.detectors:
-                detector_config = {}
+                detector_config: Dict[str, Any] = {}
                 for detector_id, det_config in self.config.detectors.items():
                     detector_config[detector_id] = det_config.get("detector_params", {})
                 payload["detectors"] = detector_config
@@ -72,7 +71,8 @@ class ContentDetector(BaseDetector):
             elif self.config.detector_params and hasattr(
                 self.config.detector_params, "detectors"
             ):
-                payload["detectors"] = self.config.detector_params.detectors
+                detectors = getattr(self.config.detector_params, "detectors", {})
+                payload["detectors"] = detectors
                 return payload
 
             # Handle flat params
@@ -86,7 +86,6 @@ class ContentDetector(BaseDetector):
 
         else:
             # DIRECT MODE: Use flat parameters for API compatibility
-            # Don't use generic containers for direct mode APIs
             detector_params = self._extract_detector_params()
 
             return {
@@ -100,17 +99,16 @@ class ContentDetector(BaseDetector):
             logger.debug("Empty response received")
             return []
 
-        """Extract detections from API response"""
         if self.config.use_orchestrator_api:
             detections = response.get("detections", [])
             logger.debug(f"Orchestrator detections: {detections}")
-            return detections
+            return cast(List[Dict[str, Any]], detections)
 
         # Direct API returns a list of lists where inner list contains detections
         if isinstance(response, list) and response:
             detections = response[0] if isinstance(response[0], list) else [response[0]]
             logger.debug(f"Direct API detections: {detections}")
-            return detections
+            return cast(List[Dict[str, Any]], detections)
 
         logger.debug("No detections found in response")
         return []
@@ -140,15 +138,15 @@ class ContentDetector(BaseDetector):
 
     def _process_detection(
         self, detection: Dict[str, Any]
-    ) -> Optional[DetectionResult]:
+    ) -> tuple[Optional[DetectionResult], float]:
         """Process detection result and validate against threshold"""
         if not detection.get("score"):
             logger.warning("Detection missing score field")
-            return None
+            return None, 0.0
 
         score = detection.get("score", 0)
         if score > self.score_threshold:
-            return DetectionResult(
+            result = DetectionResult(
                 detection="Yes",
                 detection_type=detection["detection_type"],
                 score=score,
@@ -158,7 +156,8 @@ class ContentDetector(BaseDetector):
                 end=detection.get("end", 0),
                 metadata=detection.get("metadata", {}),
             )
-        return None
+            return result, score
+        return None, score
 
     async def _run_shield_impl(
         self,
@@ -171,19 +170,30 @@ class ContentDetector(BaseDetector):
             shield = await self.shield_store.get_shield(shield_id)
             self._validate_shield(shield)
 
-            contents = [msg.content for msg in messages]
-            logger.info(f"Processing {len(contents)} message(s)")
+            for msg in messages:
+                content = msg.content
+                content_str: str
 
-            for content in contents:
+                # Simplified content handling - just check for text attribute or convert to string
+                if hasattr(content, "text"):
+                    content_str = str(content.text)
+                elif isinstance(content, list):
+                    content_str = " ".join(
+                        str(getattr(item, "text", "")) for item in content
+                    )
+                else:
+                    content_str = str(content)
+
                 truncated_content = (
-                    content[:100] + "..." if len(content) > 100 else content
+                    content_str[:100] + "..." if len(content_str) > 100 else content_str
                 )
                 logger.debug(f"Checking content: {truncated_content}")
 
-                detections = await self._call_detector_api(content, params)
+                detections = await self._call_detector_api(content_str, params)
 
                 for detection in detections:
-                    if processed := self._process_detection(detection):
+                    processed, score = self._process_detection(detection)
+                    if processed:
                         logger.info(f"Violation detected: {processed}")
                         return self.create_violation_response(
                             processed,
