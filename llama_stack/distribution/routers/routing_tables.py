@@ -328,16 +328,37 @@ class ShieldsRoutingTable(CommonRoutingTableImpl, Shields):
                 logger.info(f"Explicitly initializing safety provider: {provider_id}")
                 await provider.initialize()
 
-                # Fetch shields after initialization
-                shields_response = await provider.list_shields()
-                for shield in shields_response.data:
-                    # Ensure type is set
-                    if not hasattr(shield, "type") or not shield.type:
-                        shield.type = ResourceType.shield.value
-                    await self.dist_registry.register(shield)
-                logger.info(
-                    f"Registered {len(shields_response.data)} shields from provider {provider_id}"
-                )
+                # Fetch shields after initialization - with robust error handling
+                try:
+                    # Check if the provider implements list_shields
+                    if hasattr(provider, "list_shields") and callable(
+                        getattr(provider, "list_shields")
+                    ):
+                        shields_response = await provider.list_shields()
+                        if (
+                            shields_response
+                            and hasattr(shields_response, "data")
+                            and shields_response.data
+                        ):
+                            for shield in shields_response.data:
+                                # Ensure type is set
+                                if not hasattr(shield, "type") or not shield.type:
+                                    shield.type = ResourceType.shield.value
+                                await self.dist_registry.register(shield)
+                            logger.info(
+                                f"Registered {len(shields_response.data)} shields from provider {provider_id}"
+                            )
+                        else:
+                            logger.info(f"No shields found for provider {provider_id}")
+                    else:
+                        logger.info(
+                            f"Provider {provider_id} does not support listing shields"
+                        )
+                except Exception as e:
+                    # Log the error but continue initialization
+                    logger.warning(
+                        f"Error listing shields from provider {provider_id}: {str(e)}"
+                    )
 
     async def list_shields(self) -> ListShieldsResponse:
         return ListShieldsResponse(
