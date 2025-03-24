@@ -5,6 +5,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Union
 from urllib.parse import urlparse
 
+from pydantic import BaseModel, Field, model_validator
+
 from llama_stack.schema_utils import json_schema_type
 
 
@@ -429,29 +431,37 @@ class ChatDetectorConfig(BaseDetectorConfig):
 
 
 @json_schema_type
-@dataclass
-class FMSSafetyProviderConfig:
+class FMSSafetyProviderConfig(BaseModel):
     """Configuration for the FMS Safety Provider"""
 
-    shields: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    _detectors: Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]] = field(
-        default_factory=dict
+    shields: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+
+    # Rename _detectors to remove the leading underscore
+    detectors_internal: Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]] = (
+        Field(default_factory=dict, exclude=True)
     )
 
     # Provider-level orchestrator URL (can be copied to shields if needed)
     orchestrator_url: Optional[str] = None
 
-    def __post_init__(self):
+    class Config:
+        arbitrary_types_allowed = True
+
+    # Add a model validator to replace __post_init__
+    @model_validator(mode="after")
+    def setup_config(self):
         """Process shield configurations"""
         # Process shields into detector objects
         self._process_shields()
 
         # Replace shields dictionary with processed detector configs
-        self.shields = self._detectors
+        self.shields = self.detectors_internal
 
         # Validate all shields
         for shield in self.shields.values():
             shield.validate()
+
+        return self
 
     def _process_shields(self):
         """Process all shield configurations into detector configs"""
@@ -509,15 +519,16 @@ class FMSSafetyProviderConfig:
                 detector_class = (
                     ChatDetectorConfig if is_chat else ContentDetectorConfig
                 )
-                self._detectors[shield_id] = detector_class(**shield_config)
+                self.detectors_internal[shield_id] = detector_class(**shield_config)
 
     @property
     def all_detectors(
         self,
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
         """Get all detector configurations"""
-        return self._detectors
+        return self.detectors_internal
 
+    # Update other methods to use detectors_internal instead of _detectors
     def get_detectors_by_type(
         self, message_type: Union[str, MessageType]
     ) -> Dict[str, Union[ContentDetectorConfig, ChatDetectorConfig]]:
@@ -529,7 +540,7 @@ class FMSSafetyProviderConfig:
         )
         return {
             shield_id: shield
-            for shield_id, shield in self._detectors.items()
+            for shield_id, shield in self.detectors_internal.items()
             if type_value in shield.message_types
         }
 
