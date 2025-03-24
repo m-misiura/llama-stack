@@ -7,7 +7,7 @@ import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import Any, ClassVar, Dict, List, Optional, Tuple
+from typing import cast, Any, ClassVar, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
@@ -19,6 +19,7 @@ from llama_stack.apis.inference import (
     ToolResponseMessage,
     UserMessage,
 )
+from llama_stack.apis.resource import Resource, ResourceType
 from llama_stack.apis.safety import (
     RunShieldResponse,
     Safety,
@@ -32,6 +33,7 @@ from llama_stack.providers.remote.safety.trustyai_fms.config import (
     BaseDetectorConfig,
     EndpointType,
 )
+
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -138,12 +140,14 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
         self.registered_shields: List[Shield] = []
         self.score_threshold: float = config.confidence_threshold
         self._http_client: Optional[httpx.AsyncClient] = None
-        self._shield_store: Optional[ShieldStore] = SimpleShieldStore()  # Add this line
+        self._shield_store: ShieldStore = SimpleShieldStore()
         self._validate_config()
 
     @property
     def shield_store(self) -> ShieldStore:
         """Get shield store instance"""
+        if self._shield_store is None:
+            self._shield_store = SimpleShieldStore()
         return self._shield_store
 
     @shield_store.setter
@@ -259,9 +263,12 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
 
     def _extract_detector_params(self) -> Dict[str, Any]:
         """Extract detector parameters from configuration"""
-        detector_params = {}
+        detector_params: Dict[str, Any] = {}
 
-        if hasattr(self.config, "detector_params"):
+        if (
+            hasattr(self.config, "detector_params")
+            and self.config.detector_params is not None
+        ):
             # For chat detectors, extract model_params and metadata directly
             if hasattr(self.config.detector_params, "model_params"):
                 detector_params.update(self.config.detector_params.model_params)
@@ -312,14 +319,17 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
             # NEW STRUCTURE: Handle detectors at top level instead of under detector_params
             if hasattr(self.config, "detectors") and self.config.detectors:
                 # Process the new structure with detectors at top level
-                detector_config = {}
+                detector_config: Dict[str, Any] = {}
                 for detector_id, det_config in self.config.detectors.items():
                     detector_config[detector_id] = det_config.get("detector_params", {})
 
                 payload["detectors"] = detector_config
 
             # BACKWARD COMPATIBILITY: Handle legacy structures
-            elif hasattr(self.config, "detector_params"):
+            elif (
+                hasattr(self.config, "detector_params")
+                and self.config.detector_params is not None
+            ):
                 # Create detector configuration
                 detector_config = {}
 
@@ -483,7 +493,8 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
                 else:
                     # SUCCESS PATH: Return immediately for successful responses
                     response.raise_for_status()
-                    return response.json()
+                    json_response = response.json()
+                    return cast(DetectorResponse, response.json())
 
             except httpx.TimeoutException as e:
                 logger.error(
@@ -507,6 +518,9 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
             # Exponential backoff
             jitter = random.uniform(0.8, 1.2)
             await asyncio.sleep((self.config.backoff_factor**attempt) * jitter)
+        raise DetectorRequestError(
+            f"Request failed after {self.config.max_retries} attempts"
+        )
 
     def _process_detection(
         self, detection: Dict[str, Any]
@@ -638,7 +652,7 @@ class SimpleShieldStore(ShieldStore):
     """Simplified shield store with caching"""
 
     def __init__(self):
-        self._shields = {}
+        self._shields: Dict[str, Shield] = {}
         self._detector_configs = {}
         self._pending_configs = {}  # Add this to store configs before initialization
         self._store_id = id(self)
@@ -687,10 +701,10 @@ class SimpleShieldStore(ShieldStore):
             )
 
             # Extract detector params with full support for all structures
-            detector_params = {}
+            detector_params: Dict[str, Any] = {}
 
             # NEW STRUCTURE: Check for top-level detectors first
-            if hasattr(config, "detectors") and config.detectors:
+            if hasattr(config, "detectors") and config.detectors is not None:
                 detector_params = {"detectors": {}}
                 for det_id, det_config in config.detectors.items():
                     detector_params["detectors"][det_id] = det_config.get(
@@ -698,10 +712,16 @@ class SimpleShieldStore(ShieldStore):
                     )
 
             # LEGACY STRUCTURES: Handle detector_params variations
-            elif hasattr(config, "detector_params") and config.detector_params:
+            elif (
+                hasattr(config, "detector_params")
+                and config.detector_params is not None
+            ):
                 # Check for generic parameter containers first
                 for param_key in ["model_params", "kwargs", "metadata"]:
-                    if hasattr(config.detector_params, param_key):
+                    if (
+                        hasattr(config.detector_params, param_key)
+                        and getattr(config.detector_params, param_key) is not None
+                    ):
                         generic_params = getattr(config.detector_params, param_key)
                         if generic_params:
                             detector_params = {param_key: generic_params}
@@ -711,7 +731,7 @@ class SimpleShieldStore(ShieldStore):
                 if (
                     not detector_params
                     and hasattr(config.detector_params, "detectors")
-                    and config.detector_params.detectors
+                    and config.detector_params.detectors is not None
                 ):
                     detector_params = {"detectors": config.detector_params.detectors}
 
@@ -723,21 +743,26 @@ class SimpleShieldStore(ShieldStore):
                         if v is not None and k != "detectors"
                     }
 
-            # Create shield with all required fields
-            shield = Shield(
-                identifier=identifier,
-                provider_id="trustyai_fms",
-                provider_resource_id=identifier,
-                type="shield",
-                name=f"{identifier} Shield",
-                description=f"Safety shield for {identifier}",
-                params=detector_params,
-                metadata={
+            # Include display and metadata information in params
+            detector_params.update(
+                {
+                    "display_name": f"{identifier} Shield",
+                    "display_description": f"Safety shield for {identifier}",
                     "detector_type": "content" if not config.is_chat else "chat",
                     "message_types": list(config.message_types),
                     "confidence_threshold": config.confidence_threshold,
-                },
+                }
             )
+
+            # Create shield with only the valid fields and explicit type annotation
+            shield: Shield = Shield(
+                identifier=identifier,
+                provider_id="trustyai_fms",
+                provider_resource_id=identifier,
+                type=ResourceType.shield.value,
+                params=detector_params,
+            )
+
             logger.info(
                 f"Shield store {self._store_id} created shield: {identifier} with params: {detector_params}"
             )
@@ -769,7 +794,7 @@ class DetectorProvider(Safety, Shields):
 
     def __init__(self, detectors: Dict[str, BaseDetector]) -> None:
         self.detectors = detectors
-        self._shield_store = SimpleShieldStore()
+        self._shield_store: ShieldStore = SimpleShieldStore()
         self._shields: Dict[str, Shield] = {}
         self._initialized = False
         self._provider_id = id(self)
@@ -802,10 +827,6 @@ class DetectorProvider(Safety, Shields):
         )
         self._shield_store = value
 
-        # Check if the shield store has register_detector_config method
-        # This makes it compatible with both shield store implementations
-        has_register_config = hasattr(value, "register_detector_config")
-
         # Update detectors and sync shields
         for detector_id, detector in self.detectors.items():
             detector.shield_store = value
@@ -813,13 +834,16 @@ class DetectorProvider(Safety, Shields):
                 f"Provider {self._provider_id} updated detector {detector_id} with shield store {id(value)}"
             )
 
-            # Register detector configs if possible
-            if has_register_config and hasattr(detector, "config"):
-                asyncio.create_task(
-                    value.register_detector_config(
-                        detector.config.detector_id, detector.config
+            # Register detector configs if possible using getattr for safe access
+            if hasattr(value, "register_detector_config") and hasattr(
+                detector, "config"
+            ):
+                # Use getattr to get the method safely
+                register_method = getattr(value, "register_detector_config", None)
+                if callable(register_method):
+                    asyncio.create_task(
+                        register_method(detector.config.detector_id, detector.config)
                     )
-                )
 
     async def initialize(self) -> None:
         """Initialize provider and register initial shields"""
@@ -856,15 +880,18 @@ class DetectorProvider(Safety, Shields):
             if detector_init_tasks:
                 await asyncio.gather(*detector_init_tasks)
 
-            shields_to_register = []
+            shields_to_register: List[Tuple[BaseDetector, Shield]] = []
 
             # Create shields directly without relying on shield store methods
             for detector in self.detectors.values():
                 config_id = detector.config.detector_id
-                detector_params = {}
+                detector_params: Dict[str, Any] = {}
 
                 # NEW STRUCTURE: Check for top-level detectors first
-                if hasattr(detector.config, "detectors") and detector.config.detectors:
+                if (
+                    hasattr(detector.config, "detectors")
+                    and detector.config.detectors is not None
+                ):
                     detector_params = {"detectors": {}}
                     for det_id, det_config in detector.config.detectors.items():
                         detector_params["detectors"][det_id] = det_config.get(
@@ -873,19 +900,28 @@ class DetectorProvider(Safety, Shields):
                 # LEGACY STRUCTURES: Handle detector_params variations
                 elif (
                     hasattr(detector.config, "detector_params")
-                    and detector.config.detector_params
+                    and detector.config.detector_params is not None
                 ):
                     # Create flat_params by extracting from all containers
-                    flat_params = {}
+                    flat_params: Dict[str, Any] = {}
 
                     # Extract parameters from model_params, metadata, kwargs containers
-                    if hasattr(detector.config.detector_params, "model_params"):
+                    if (
+                        hasattr(detector.config.detector_params, "model_params")
+                        and detector.config.detector_params.model_params is not None
+                    ):
                         flat_params.update(detector.config.detector_params.model_params)
 
-                    if hasattr(detector.config.detector_params, "metadata"):
+                    if (
+                        hasattr(detector.config.detector_params, "metadata")
+                        and detector.config.detector_params.metadata is not None
+                    ):
                         flat_params.update(detector.config.detector_params.metadata)
 
-                    if hasattr(detector.config.detector_params, "kwargs"):
+                    if (
+                        hasattr(detector.config.detector_params, "kwargs")
+                        and detector.config.detector_params.kwargs is not None
+                    ):
                         flat_params.update(detector.config.detector_params.kwargs)
 
                     # Also include direct properties, skipping empty containers
@@ -907,7 +943,7 @@ class DetectorProvider(Safety, Shields):
                     # Special handling for chat detectors
                     if detector.config.is_chat:
                         # Create a clean model_params dictionary with only the parameters we need
-                        model_params = {}
+                        model_params: Dict[str, Any] = {}
 
                         # Add relevant parameters from flat_params, excluding "params"
                         for k, v in flat_params.items():
@@ -918,7 +954,10 @@ class DetectorProvider(Safety, Shields):
 
                         # Set model_params in detector_params
                         detector_params["model_params"] = model_params
-                    elif hasattr(detector.config.detector_params, "detectors"):
+                    elif (
+                        hasattr(detector.config.detector_params, "detectors")
+                        and detector.config.detector_params.detectors is not None
+                    ):
                         # Handle composite detectors
                         detector_params["detectors"] = (
                             detector.config.detector_params.detectors
@@ -927,32 +966,40 @@ class DetectorProvider(Safety, Shields):
                         # For non-chat detectors, use params as-is
                         detector_params = flat_params
 
+                    # Add display information to params
+                    detector_params.update(
+                        {
+                            "display_name": f"{config_id} Shield",
+                            "display_description": f"Safety shield for {config_id}",
+                            "detector_type": (
+                                "content" if not detector.config.is_chat else "chat"
+                            ),
+                            "message_types": list(detector.config.message_types),
+                            "confidence_threshold": detector.config.confidence_threshold,
+                        }
+                    )
+
+                # Create shield with valid parameters only
                 shield = Shield(
                     identifier=config_id,
                     provider_id="trustyai_fms",
                     provider_resource_id=config_id,
-                    type="shield",
-                    name=f"{config_id} Shield",
-                    description=f"Safety shield for {config_id}",
+                    type=ResourceType.shield.value,
                     params=detector_params,
-                    metadata={
-                        "detector_type": (
-                            "content" if not detector.config.is_chat else "chat"
-                        ),
-                        "message_types": list(detector.config.message_types),
-                        "confidence_threshold": detector.config.confidence_threshold,
-                    },
                 )
+
                 # Special handling for different detector configurations
                 if detector.config.is_chat:
                     # Chat detectors already work correctly - no changes needed
                     pass
                 elif (
-                    hasattr(detector.config.detector_params, "detectors")
-                    and detector.config.detector_params.detectors
+                    detector.config.detector_params
+                    is not None  # Add explicit null check here
+                    and hasattr(detector.config.detector_params, "detectors")
+                    and detector.config.detector_params.detectors is not None
                 ):
                     # Orchestrator configuration with multiple detectors
-                    nested_detectors = {}
+                    nested_detectors: Dict[str, Any] = {}
 
                     # Access the detectors through detector_params where they're actually stored
                     for (
@@ -970,13 +1017,15 @@ class DetectorProvider(Safety, Shields):
                     if nested_detectors:
                         shield.params = {"detectors": nested_detectors}
 
-                elif detector.config.detector_params:
+                elif detector.config.detector_params is not None:
                     # Standard content detector with direct parameters
-                    shield.params = (
-                        detector.config.detector_params.to_categorized_dict()
-                    )
+                    if hasattr(detector.config.detector_params, "to_categorized_dict"):
+                        shield.params = (
+                            detector.config.detector_params.to_categorized_dict()
+                        )
 
                 self._shields[config_id] = shield
+
             # Register shields in parallel
             register_tasks = []
             for detector, shield in shields_to_register:
@@ -997,7 +1046,7 @@ class DetectorProvider(Safety, Shields):
     async def list_shields(self) -> ListShieldsResponse:
         """List all registered shields"""
         if not self._initialized:
-            return await self.initialize()
+            await self.initialize()  # Just await it, don't return its result
 
         shields = list(self._shields.values())
         shield_ids = [s.identifier for s in shields]
@@ -1006,7 +1055,7 @@ class DetectorProvider(Safety, Shields):
         )
         return ListShieldsResponse(data=shields)
 
-    async def get_shield(self, identifier: str) -> Optional[Shield]:
+    async def get_shield(self, identifier: str) -> Shield:
         """Get shield by identifier"""
         await self.initialize()
 
@@ -1017,7 +1066,7 @@ class DetectorProvider(Safety, Shields):
         # Get detector and config
         detector = self.detectors.get(identifier)
         if not detector:
-            return None
+            raise DetectorValidationError(f"Shield not found: {identifier}")
 
         # Create shield from store
         shield = await self._shield_store.get_shield(identifier)
@@ -1025,7 +1074,7 @@ class DetectorProvider(Safety, Shields):
             self._shields[identifier] = shield
             return shield
 
-        return None
+        raise DetectorValidationError(f"Failed to get shield: {identifier}")
 
     async def register_shield(
         self,
@@ -1150,7 +1199,8 @@ class DetectorProvider(Safety, Shields):
 
             # Step 5: Determine if detector is composite
             is_composite = (
-                hasattr(detector.config.detector_params, "detectors")
+                detector.config.detector_params is not None
+                and hasattr(detector.config.detector_params, "detectors")
                 and detector.config.detector_params.detectors is not None
             )
 
@@ -1171,9 +1221,15 @@ class DetectorProvider(Safety, Shields):
                         request = detector._prepare_request_payload([message], params)
                         response = await detector._make_request(request)
                         detections = response.get("detections", [])
-                        configured_detectors = list(
-                            detector.config.detector_params.detectors.keys()
-                        )
+                        configured_detectors = []
+                        if (
+                            detector.config.detector_params is not None
+                            and hasattr(detector.config.detector_params, "detectors")
+                            and detector.config.detector_params.detectors is not None
+                        ):
+                            configured_detectors = list(
+                                detector.config.detector_params.detectors.keys()
+                            )
 
                         individual_results = []
                         message_has_violation = False
@@ -1275,6 +1331,9 @@ class DetectorProvider(Safety, Shields):
                         continue
 
                     # Extract data
+                    assert isinstance(
+                        result, dict
+                    ), "Expected result to be a dictionary"
                     message_results.append(result["result"])
 
                     # Update aggregate metrics
@@ -1367,6 +1426,9 @@ class DetectorProvider(Safety, Shields):
                         continue
 
                     # Extract data
+                    assert isinstance(
+                        result, dict
+                    ), "Expected result to be a dictionary"
                     message_results.append(result["result"])
 
                     # Update aggregate metrics
@@ -1406,11 +1468,17 @@ class DetectorProvider(Safety, Shields):
                     "active_detectors": (
                         len(detector.config.detector_params.detectors)
                         if is_composite
+                        and detector.config.detector_params is not None
+                        and hasattr(detector.config.detector_params, "detectors")
+                        and detector.config.detector_params.detectors is not None
                         else 1
                     ),
                     "total_checks_performed": (
                         total_filtered * len(detector.config.detector_params.detectors)
                         if is_composite
+                        and detector.config.detector_params is not None
+                        and hasattr(detector.config.detector_params, "detectors")
+                        and detector.config.detector_params.detectors is not None
                         else total_filtered
                     ),
                     "total_violations_found": total_detections,
