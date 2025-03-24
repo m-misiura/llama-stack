@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, cast
+
 from llama_stack.apis.inference import Message
 from llama_stack.apis.safety import RunShieldResponse
 from llama_stack.providers.remote.safety.trustyai_fms.config import (

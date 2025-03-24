@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from llama_stack.apis.inference import Message
 from llama_stack.apis.safety import RunShieldResponse
@@ -307,7 +307,7 @@ class ChatDetector(BaseDetector):
                 message_dict: ChatMessage = {"content": msg.content, "role": msg.role}
                 # Preserve type if present for internal processing
                 if hasattr(msg, "type"):
-                    message_dict["type"] = getattr(msg, "type")
+                    message_dict["type"] = msg.type
                 chat_messages.append(message_dict)
 
             logger.debug(f"Prepared messages: {chat_messages}")

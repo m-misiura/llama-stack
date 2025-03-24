@@ -7,7 +7,7 @@ import random
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import cast, Any, ClassVar, Dict, List, Optional, Tuple
+from typing import Any, ClassVar, Dict, List, Optional, Tuple, cast
 from urllib.parse import urlparse
 
 import httpx
@@ -19,7 +19,7 @@ from llama_stack.apis.inference import (
     ToolResponseMessage,
     UserMessage,
 )
-from llama_stack.apis.resource import Resource, ResourceType
+from llama_stack.apis.resource import ResourceType
 from llama_stack.apis.safety import (
     RunShieldResponse,
     Safety,
@@ -33,7 +33,6 @@ from llama_stack.providers.remote.safety.trustyai_fms.config import (
     BaseDetectorConfig,
     EndpointType,
 )
-
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -493,7 +492,6 @@ class BaseDetector(Safety, ShieldsProtocolPrivate, ABC):
                 else:
                     # SUCCESS PATH: Return immediately for successful responses
                     response.raise_for_status()
-                    json_response = response.json()
                     return cast(DetectorResponse, response.json())
 
             except httpx.TimeoutException as e:
