@@ -1,0 +1,10 @@
+version: '2'
+built_at: '2025-02-19T00:00:00Z'
+distribution_spec:
+  description: Use remote vLLM for inference with three FMS safety detectors (regex, hap, and chat)
+  providers:
+    inference:
+    - remote::vllm
+    safety:
+    - remote::trustyai_fms
+image_type: conda
